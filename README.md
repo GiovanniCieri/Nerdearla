@@ -19,7 +19,7 @@ Cada sesión procesa una fuente de audio y transmite el texto resultante a todos
 | Necesidad | Estado en esta versión |
 | --- | --- |
 | Audio en vivo | Micrófono/consola o audio de una pestaña compatible del navegador, compartida explícitamente por quien opera. |
-| Transcripción y traducción | Flujo Gemini Live recomendado; la interfaz también permite elegir idioma original, destino y detección automática de entrada. |
+| Transcripción y traducción | Flujo Gemini Live recomendado; cada sesión configura el idioma de entrada y un destino de traducción. La audiencia puede alternar entre original y ese destino. |
 | Varias salas | Sesiones independientes. Se comprobó manualmente en Brave la captura simultánea de dos pestañas de stream (Olga y Luzu). La integración automatizada también comprueba dos sesiones con proveedores simulados; ninguna de estas pruebas demuestra capacidad para 30 salas reales con Gemini. |
 | Audiencia | Página web por sala con subtítulos recientes. En esta v1, la persona elige entre el audio original y el único idioma de traducción configurado para esa sesión. |
 | Código abierto | Licencia MIT incluida en [`LICENSE`](LICENSE). |
@@ -120,13 +120,13 @@ El flujo de operación comprobado para trabajar con varias transmisiones usa **d
 
 1. Iniciá Docker y abrí el panel web en Brave: [http://localhost:3001](http://localhost:3001).
 2. Abrí una **ventana nueva** de Brave. En esa segunda ventana, abrí una pestaña por cada transmisión; por ejemplo, una para el stream de Olga y otra para el de Luzu. Iniciá sesión en los sitios que lo requieran y comprobá que cada video reproduzca sonido.
-3. Instalá una vez la extensión de captura siguiendo [Instalar la extensión en Brave](#instalar-la-extensión-en-brave). Dejá el panel en la primera ventana y usá la segunda para operar las pestañas fuente.
+3. Instalá una vez la extensión de captura siguiendo [Instalar la extensión en Brave](#instalar-la-extension-en-brave). Dejá el panel en la primera ventana y usá la segunda para operar las pestañas fuente.
 4. En la pestaña del stream de Olga, abrí **Nerdearla Captura** desde el ícono de extensiones. Creá una sesión llamada Olga (o elegí una sesión pausada), seleccioná el idioma hablado y el destino, y pulsá **Conectar esta pestaña**.
 5. Volvé a la pestaña del stream de Luzu y repetí el proceso con su propia sesión. Cada sesión queda asociada a su pestaña y conserva un flujo de audio separado.
 6. Volvé al panel de la primera ventana. Confirmá que ambas salas estén activas y que reciban audio y subtítulos. Abrí la vista de audiencia de cada sesión para revisar la salida.
 7. Para detener una fuente, volvé a su pestaña y pulsá **Detener audio de esta pestaña**. La otra sala sigue conectada.
 
-Este montaje con dos streams simultáneos en Brave fue probado durante el desarrollo. La extensión toma el ID de la pestaña activa con `chrome.tabCapture`; no depende del selector de pantalla ni de **Compartir esta pestaña** de la barra del navegador. Usá el botón de la extensión dentro de cada pestaña fuente para iniciar o detener solo esa sala.
+En la prueba manual que logró mantener dos streams en paralelo, se usó este montaje de ventanas en Brave. La extensión toma el ID de la pestaña activa con `chrome.tabCapture`; no depende del selector de pantalla ni de **Compartir esta pestaña** de la barra del navegador. Usá el botón de la extensión dentro de cada pestaña fuente para iniciar o detener solo esa sala.
 
 La misma configuración sirve para YouTube, Swapcard y otras páginas web que reproduzcan audio accesible al navegador. Iniciá la reproducción antes de conectar. DRM, audio bloqueado por el sitio, políticas del navegador o restricciones de la red pueden impedir la captura. Para streams que exijan cuenta, iniciá sesión en Brave antes de conectar la pestaña.
 
@@ -144,6 +144,8 @@ El popup muestra la dirección del servidor, la pestaña activa, las sesiones gu
 Si cambiás el ID de la extensión en `extension/manifest.json`, actualizá `CAPTURE_EXTENSION_ID` en `.env` y recreá el contenedor. La extensión envía solo el audio capturado al backend; no almacena el audio en disco. Usa las APIs oficiales de Chrome [`tabCapture`](https://developer.chrome.com/docs/extensions/reference/api/tabCapture) y [`offscreen`](https://developer.chrome.com/docs/extensions/reference/api/offscreen).
 
 Cada pestaña fuente necesita su propia sesión. La extensión evita capturar dos veces el mismo tab ID; el número de sesiones simultáneas que el equipo puede sostener depende de la CPU, la red y las cuotas y límites del motor elegido. Dos salas funcionando no implica que una cuenta gratuita pueda procesar treinta a la vez. Antes de un evento, probá la cantidad de salas prevista y observá señal, subtítulos, latencia, errores y costo en el panel.
+
+En esta v1, el idioma destino se configura al crear cada sesión; la página de audiencia ofrece el audio original o esa traducción. No permite cambiar a un segundo idioma destino mientras la sesión sigue corriendo. La identificación de idioma del modelo también puede confundir idiomas cercanos, como español y portugués, incluso cuando el audio parece claro; revisá las primeras líneas antes de publicar la vista de audiencia.
 
 ### Aplicación nativa para Windows (opcional)
 
@@ -277,7 +279,7 @@ El código se publica bajo licencia [MIT](LICENSE). Dependencias, pesos de model
 
 ## Demo y envío a la competencia
 
-**Demo en video (1–2 minutos):** pendiente de grabar y enlazar antes de enviar. Conviene mostrar una fuente real, transcripción original, traducción, elección de idioma de audiencia y, si alcanza el tiempo, OBS/overlay. Para jurados que no hablan español, agregá subtítulos en inglés.
+**Demo en video (1–2 minutos):** pendiente de grabar y enlazar antes de enviar. Conviene mostrar una fuente real, transcripción original, traducción, selector entre audio original y destino configurado, y, si alcanza el tiempo, OBS/overlay. Para jurados que no hablan español, agregá subtítulos en inglés.
 
 El link del repositorio público y el del proyecto en Devpost se agregan al realizar esos envíos; no se inventan aquí.
 
