@@ -1,0 +1,12 @@
+node_modules
+.pnpm-store
+.git
+.github
+.env
+.env.*
+!.env.example
+data
+benchmarks
+reports
+npm-debug.log*
+pnpm-debug.log*

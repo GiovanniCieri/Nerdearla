@@ -1,0 +1,32 @@
+services:
+  captions:
+    environment:
+      LOCAL_SPEAKER_DIARIZATION: "true"
+
+  local-asr:
+    build:
+      context: https://github.com/QuentinFuxa/WhisperLiveKit.git#v0.2.26
+      dockerfile: Dockerfile.cpu
+      args:
+        EXTRAS: cpu,translation,diarization-sortformer
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    command:
+      - --backend
+      - faster-whisper
+      - --model
+      - base
+      - --language
+      - auto
+      - --target-language
+      - es
+      - --translation-backend
+      - nllb
+      - --nllb-backend
+      - ctranslate2
+      - --nllb-size
+      - 600M
+      - --diarization
+      - --pcm-input
+      - --port
+      - "8000"

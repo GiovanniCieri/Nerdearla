@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7f8">
+  <title>Nerdearla Live · Producción</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/enhancements.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Nerdearla Live inicio">
+        <span class="brand-mark">n</span>
+        <span class="brand-copy"><strong>nerdearla</strong><small>LIVE CAPTIONS</small></span>
+      </a>
+      <div class="workspace-switch"><span class="workspace-icon">N</span><span><b>Nerdearla 2026</b><small>Equipo de producción</small></span><span class="chevron">⌄</span></div>
+      <nav class="side-nav" aria-label="Principal">
+        <p class="nav-caption">EVENTO</p>
+        <a class="nav-link active" href="/"><span class="nav-icon">◫</span> Producción <span class="nav-count" id="navLiveCount">0</span></a>
+        <a class="nav-link" href="#sesiones"><span class="nav-icon">▦</span> Sesiones</a>
+        <a class="nav-link" href="#glosario"><span class="nav-icon">⌘</span> Glosario</a>
+        <div class="nav-divider"></div>
+        <p class="nav-caption">HERRAMIENTAS</p>
+        <a class="nav-link" href="#como-funciona"><span class="nav-icon">◉</span> Estado del sistema</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="help-card"><div class="help-spark">✳</div><strong>¿Todo listo para salir?</strong><p>Revisá el estado de audio y la configuración de Gemini antes de abrir puertas.</p><a href="#como-funciona">Guía de producción <span>↗</span></a></div>
+        <div class="profile"><span class="avatar">GP</span><span><b>Producción</b><small>Nerdearla</small></span><button class="icon-button" aria-label="Opciones">···</button></div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Eventos</span><span class="crumb-slash">/</span><b>Nerdearla 2026</b></div>
+        <div class="top-actions"><span class="event-date"><span class="calendar-icon">▣</span> 24 — 26 sept, 2026</span><span class="top-divider"></span><button class="icon-button notification" aria-label="Notificaciones">♧<i></i></button><span class="avatar avatar-small">GP</span></div>
+      </header>
+
+      <div class="content-wrap">
+        <section class="page-heading">
+          <div><div class="eyebrow"><span class="eyebrow-dot"></span> PANEL DE PRODUCCIÓN <span class="eyebrow-sep">·</span> BUENOS AIRES</div><h1>El escenario, en cada idioma.</h1><p>Gestioná el audio y los subtítulos en vivo de todas las salas desde un solo lugar.</p></div>
+          <div class="heading-actions"><button class="button button-secondary" id="demoButton"><span class="play-icon">▶</span> Ver demo</button><button class="button button-primary" id="newSessionButton"><span class="plus">＋</span> Nueva sesión</button></div>
+        </section>
+
+        <section class="system-banner" id="systemBanner" aria-live="polite">
+          <span class="system-icon">✳</span><span class="system-copy"><b id="systemTitle">Conectando con el sistema…</b><small id="systemDescription">Comprobando la configuración de Gemini.</small></span><a href="#como-funciona" id="systemAction">Ver configuración <span>↗</span></a>
+        </section>
+
+        <section class="featured-session" aria-label="Charla en vivo de Nerdearla">
+          <div class="featured-live-mark"><span></span> EN VIVO AHORA</div>
+          <div class="featured-copy"><strong>Monty Widenius opening keynote</strong><span>Gran Sala · Inglés <b>·</b> 10:10–10:50</span></div>
+          <span class="featured-track">DATA SCIENCE / AI</span>
+          <button class="button button-featured" id="prepareKeynote">Preparar traducción <span>→</span></button>
+        </section>
+
+        <section class="stats-grid" aria-label="Resumen del evento">
+          <article class="stat-card"><div class="stat-top"><span>Sesiones activas</span><span class="stat-icon stat-green">◉</span></div><div class="stat-value"><strong id="activeCount">0</strong><span class="stat-unit">/ <span id="totalCount">0</span></span></div><div class="stat-foot"><span class="status-dot green-dot"></span> En transmisión ahora</div></article>
+          <article class="stat-card"><div class="stat-top"><span>Idiomas en uso</span><span class="stat-icon stat-blue">文</span></div><div class="stat-value"><strong id="languageCount">0</strong><span class="stat-unit">pares</span></div><div class="stat-foot">Español <span class="tiny-arrow">↔</span> English</div></article>
+          <article class="stat-card"><div class="stat-top"><span>Subtítulos emitidos</span><span class="stat-icon stat-orange">≋</span></div><div class="stat-value"><strong id="captionCount">0</strong><span class="stat-unit">fragmentos</span></div><div class="stat-foot">En todas las sesiones</div></article>
+          <article class="stat-card"><div class="stat-top"><span>Última actividad</span><span class="stat-icon stat-purple">◷</span></div><div class="stat-value"><strong class="last-activity" id="lastActivity">—</strong></div><div class="stat-foot">Hora local · Buenos Aires</div></article>
+        </section>
+
+        <section class="operations-grid" aria-label="Costos y salud del sistema">
+          <article class="cost-panel" id="costPanel" aria-live="polite">
+            <div class="ops-panel-heading"><div><span class="ops-kicker">COSTO ESTIMADO EN TIEMPO REAL</span><h2 id="costBillable">US$0.0000</h2><p id="costTierLabel">Nivel gratuito · sujeto a cuota disponible</p></div><span class="cost-live-dot"><i></i> ACTUALIZA CADA 2 S</span></div>
+            <div class="cost-equivalent" id="costEquivalent">US$0.0000 equivalente a tarifa paga</div>
+            <div class="cost-meter"><span id="costBudget"></span></div>
+            <div class="cost-meter-label" id="costBudgetLabel">Presupuesto diario sin límite configurado</div>
+            <div class="cost-usage" id="costUsage">0 minutos de audio procesados en las últimas 24 h</div>
+            <div class="cost-session-rows" id="costSessionRows"><p class="cost-empty">El costo por sala aparecerá cuando fluya audio.</p></div>
+            <details class="cost-method"><summary>Cómo se calcula</summary><p id="costBasis">Estimación de uso de audio y texto según las tarifas configuradas.</p></details>
+          </article>
+          <article class="monitor-panel" aria-live="polite">
+            <div class="ops-panel-heading"><div><span class="ops-kicker">SALUD Y LATENCIA</span><h2>Monitoreo de sesiones</h2></div><span class="monitor-icon">◉</span></div>
+            <p id="monitorStatus">Comprobando salas, espectadores y audio…</p>
+            <div class="monitor-latency" id="monitorLatency">Midiendo latencia con el próximo fragmento de voz…</div>
+            <div class="monitor-foot">El audio no se guarda. Las transcripciones sí se conservan en el volumen durable del servidor.</div>
+          </article>
+        </section>
+
+        <section class="sessions-section" id="sesiones">
+          <div class="section-heading"><div><div class="section-title-row"><h2>Sesiones</h2><span class="session-total" id="sessionTotal">0</span></div><p>Estado y salida de subtítulos por sala.</p></div><div class="section-tools"><label class="search-box"><span>⌕</span><input id="sessionSearch" type="search" placeholder="Buscar sesión" aria-label="Buscar sesión"><kbd>⌘ K</kbd></label><button class="button button-small button-secondary" id="filterButton">☷ <span>Filtrar</span></button><button class="button button-small button-primary" id="addSessionSmall">＋ <span>Agregar</span></button></div></div>
+          <div class="session-grid" id="sessionGrid"></div>
+          <div class="empty-state" id="emptyState" hidden><div class="empty-illustration"><span>♫</span><i>CC</i></div><h3>El próximo escenario está por empezar</h3><p>Creá una sesión para conectar una fuente de audio y emitir los primeros subtítulos.</p><button class="button button-primary" id="emptyAddButton">＋ Crear una sesión</button></div>
+          <div class="template-grid" id="templateGrid" hidden>
+            <article class="template-card"><span class="template-icon purple-template">⌘</span><span><b>Auditorio principal</b><small>English · con traducción al español</small></span><button data-template="Principal" aria-label="Crear sesión Auditorio principal">＋</button></article>
+            <article class="template-card"><span class="template-icon orange-template">◈</span><span><b>Track Open Source</b><small>Español · subtítulos originales</small></span><button data-template="Open Source" aria-label="Crear sesión Track Open Source">＋</button></article>
+            <article class="template-card"><span class="template-icon blue-template">⌁</span><span><b>Track Cloud &amp; DevOps</b><small>English · con traducción al español</small></span><button data-template="Cloud & DevOps" aria-label="Crear sesión Track Cloud y DevOps">＋</button></article>
+          </div>
+        </section>
+
+        <section class="how-section" id="como-funciona">
+          <div class="how-heading"><div><div class="eyebrow">OPERACIÓN</div><h2>Listo para transmitir</h2><p>La clave de Gemini queda en el servidor. El audio viaja cifrado a Google y esta app no lo almacena.</p></div><span class="privacy-badge">⌑ <span>Audio en tránsito</span></span></div>
+          <div class="pipeline"><div class="pipeline-step"><span class="step-number">01</span><span class="step-icon mic-step">♩</span><span><b>Entrada de audio</b><small>Micrófono o consola</small></span><span class="step-check" id="micStatus">·</span></div><span class="pipeline-line"></span><div class="pipeline-step"><span class="step-number">02</span><span class="step-icon gemini-step">✳</span><span><b>Gemini Live</b><small id="modelLabel">Transcripción en vivo</small></span><span class="step-check" id="geminiStatus">·</span></div><span class="pipeline-line"></span><div class="pipeline-step"><span class="step-number">03</span><span class="step-icon captions-step">CC</span><span><b>Subtítulos y traducción</b><small>Web · VTT · audiencia</small></span><span class="step-check ready-check">✓</span></div></div>
+          <div class="connection-note" id="connectionNote"><span>ⓘ</span><span>Para transmitir en vivo, cargá una <code>GEMINI_API_KEY</code> en el archivo <code>.env</code>. Mientras tanto podés explorar el producto con la demo.</span></div>
+        </section>
+        <footer class="page-footer"><span>NERDEARLA LIVE <span>·</span> OPEN SOURCE</span><span>Hecho para que todas las charlas se entiendan.</span><a href="https://github.com" target="_blank" rel="noreferrer">Código y documentación ↗</a></footer>
+      </div>
+    </main>
+  </div>
+
+  <dialog class="session-dialog" id="sessionDialog">
+    <form id="sessionForm" method="dialog">
+      <div class="dialog-head"><div><span class="dialog-kicker">NUEVA TRANSMISIÓN</span><h2>Configurar sesión</h2><p>Un canal independiente de audio y subtítulos.</p></div><button type="button" class="dialog-close" id="closeDialog" aria-label="Cerrar">×</button></div>
+      <label class="form-label" for="titleInput">Nombre de la sesión</label><input class="form-input" id="titleInput" name="title" placeholder="Ej. Auditorio principal" required maxlength="70">
+      <label class="form-label" for="speakerInput">Persona oradora o panelistas <span class="optional-label">OPCIONAL</span></label><input class="form-input" id="speakerInput" name="speaker" placeholder="Ej. Alex Rivera; para panel, separá los nombres con coma" maxlength="120"><p class="glossary-help">La diarización identifica “Voz 1”, “Voz 2”… Si detecta una presentación explícita que coincide con este listado, producción puede confirmar el nombre.</p>
+      <div class="form-row"><div><label class="form-label" for="languageInput">Idioma de la charla</label><select class="form-input" id="languageInput" name="language"><option value="en">English</option><option value="es">Español</option><option value="pt">Português (Brasil)</option><option value="auto">Detección automática</option></select></div><div><label class="form-label" for="translateInput">Idioma de traducción</label><select class="form-input" id="translateInput" name="translateTo"><option value="es">Español</option><option value="en">English</option><option value="pt">Português</option><option value="none">Solo idioma original</option></select></div></div>
+      <label class="form-label" for="audioSourceInput">Fuente de audio</label><select class="form-input" id="audioSourceInput" name="audioSource"><option value="microphone">Micrófono o consola conectada</option><option value="tab">Audio de una pestaña del navegador</option></select>
+      <label class="form-label" for="engineInput">Motor de transcripción</label><select class="form-input" id="engineInput" name="engine"><option value="gemini">Gemini Live Translate · recomendado</option><option value="gemini-direct">Gemini directo · experimental</option><option value="auto" disabled>Gemini con respaldo local</option><option value="local" disabled>WhisperLiveKit · local</option></select><p class="glossary-help">El modo recomendado conecta al servidor y empieza a procesar apenas la pista está lista. Gemini directo evita un salto de red, pero puede tardar al emitir su token efímero; dejalo para comparar conexiones.</p>
+      <label class="form-label" for="glossaryInput">Glosario de términos <span class="optional-label">OPCIONAL · HASTA 100</span></label><textarea class="form-input form-textarea" id="glossaryInput" name="glossary" placeholder="Kubernetes, Nerdearla, WebAssembly&#10;Separá los términos con una coma o un salto de línea"></textarea><p class="glossary-help">El glosario mejora nombres y términos técnicos. Activa la traducción por fragmento, que tarda algo más que el modo directo.</p>
+      <label class="early-translation-option"><input id="earlyTranslationInput" type="checkbox"><span><b>Mostrar borradores de traducción antes</b><small id="earlyTranslationHelp">La traducción nativa suele ser más consistente. Activá borradores anticipados si preferís ver una versión provisional antes.</small></span></label>
+      <div class="dialog-notice" id="audioNotice"><span>♩</span><span>Al continuar, el navegador te va a pedir acceso a un micrófono o a la entrada de audio de la sala.</span></div>
+      <p class="data-use-note">El audio se envía a Google Gemini para generar subtítulos. En el nivel gratuito, Google puede usar solicitudes y respuestas para mejorar sus productos. No incluyas conversaciones privadas.</p>
+      <div class="dialog-actions"><button type="button" class="button button-secondary" id="cancelDialog">Cancelar</button><button type="submit" class="button button-primary">Conectar audio <span>→</span></button></div>
+    </form>
+  </dialog>
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

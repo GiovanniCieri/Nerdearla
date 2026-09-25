@@ -1,0 +1,5 @@
+# Runtime artifacts are shipped by these packages; their install hooks are not
+# needed to run the application.
+allowBuilds:
+  '@google/genai': false
+  protobufjs: false

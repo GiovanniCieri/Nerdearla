@@ -1,0 +1,43 @@
+services:
+  captions:
+    build:
+      context: .
+    image: nerdearla-live-captions:local
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATA_DIR: /app/data
+      GEMINI_BILLING_TIER: ${GEMINI_BILLING_TIER:-free}
+      MAX_ACTIVE_SESSIONS: ${MAX_ACTIVE_SESSIONS:-30}
+      MAX_AUDIO_QUEUE_CHUNKS: ${MAX_AUDIO_QUEUE_CHUNKS:-3}
+      MAX_TRANSLATION_REQUESTS: ${MAX_TRANSLATION_REQUESTS:-8}
+      DRAFT_TRANSLATION_INTERVAL_MS: ${DRAFT_TRANSLATION_INTERVAL_MS:-1200}
+      DRAFT_TRANSLATIONS_PER_SECOND: ${DRAFT_TRANSLATIONS_PER_SECOND:-4}
+      DAILY_BUDGET_USD: ${DAILY_BUDGET_USD:-0}
+    ports:
+      # The local development server already uses 3000 on this machine.
+      # Override with HOST_PORT=3000 when that port is free.
+      - "${HOST_PORT:-3001}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 15s
+    volumes:
+      - caption-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  caption-data:

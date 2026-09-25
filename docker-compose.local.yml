@@ -1,0 +1,57 @@
+services:
+  captions:
+    environment:
+      LOCAL_ASR_WS_URL: ws://local-asr:8000/asr
+      LOCAL_ASR_TOKEN: ${LOCAL_ASR_TOKEN:-}
+      AUTO_FALLBACK_TO_LOCAL: ${AUTO_FALLBACK_TO_LOCAL:-true}
+      LOCAL_ASR_INFRA_USD_PER_MINUTE: ${LOCAL_ASR_INFRA_USD_PER_MINUTE:-0}
+    depends_on:
+      local-asr:
+        condition: service_healthy
+
+  local-asr:
+    build:
+      context: https://github.com/QuentinFuxa/WhisperLiveKit.git#v0.2.26
+      dockerfile: Dockerfile.cpu
+      args:
+        EXTRAS: cpu,translation
+    image: nerdearla-whisperlivekit:0.2.26-cpu
+    init: true
+    restart: unless-stopped
+    command:
+      - --backend
+      - faster-whisper
+      - --model
+      - base
+      - --language
+      - auto
+      - --target-language
+      - es
+      - --translation-backend
+      - nllb
+      - --nllb-backend
+      - ctranslate2
+      - --nllb-size
+      - 600M
+      - --pcm-input
+      - --port
+      - "8000"
+    expose:
+      - "8000"
+    volumes:
+      - whisper-model-cache:/root/.cache/huggingface
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  whisper-model-cache:
