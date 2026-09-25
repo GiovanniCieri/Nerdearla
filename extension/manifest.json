@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Nerdearla Captura por pestaña",
+  "description": "Envía el audio de cada pestaña Chromium a una sesión independiente de Nerdearla Live Captions.",
+  "version": "1.0.0",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAndvg/eKP7i/xwb1AHHJ1W2ODj7BFZfTZ8xwkQ7nhbNnM7rVOXoAJ93bYNcrFVKIsHNhwWxUb5Hfqzg0unbFB4K4KeHK6M2YkIPQl8mL3yXeQW8KP98nL5weF62L/HcXoCFYQQA82DGoWajsJi0tEfnvPU2Z/36yug5gB9ZvQyVVogoJR4QfCxdt6555zhkG59joo5oUNza7X0eu7102P3sEU00CsWL0+qH7XEqAWkETUkfB8jdmZ+bJ8IhWTEAv21Osk/f4bjX60Agh00IOKPIc3sitm6Gn/tstTzXUI2nTTTNwqIuDH2q/XkhsgjQxMn93xRkg8gwvyc/btNLhtgwIDAQAB",
+  "permissions": ["activeTab", "tabs", "offscreen", "storage", "tabCapture"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "service-worker.js" },
+  "action": {
+    "default_title": "Capturar esta pestaña para Nerdearla",
+    "default_popup": "popup.html"
+  }
+}

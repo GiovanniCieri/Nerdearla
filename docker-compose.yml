@@ -19,6 +19,7 @@ services:
       DRAFT_TRANSLATION_INTERVAL_MS: ${DRAFT_TRANSLATION_INTERVAL_MS:-1200}
       DRAFT_TRANSLATIONS_PER_SECOND: ${DRAFT_TRANSLATIONS_PER_SECOND:-4}
       DAILY_BUDGET_USD: ${DAILY_BUDGET_USD:-0}
+      CAPTURE_EXTENSION_ID: ${CAPTURE_EXTENSION_ID:-hihbplbemkhehapigojnjdhcilndcjeg}
     ports:
       # The local development server already uses 3000 on this machine.
       # Override with HOST_PORT=3000 when that port is free.

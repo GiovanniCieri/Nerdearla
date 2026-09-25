@@ -1,3 +1,5 @@
+import { loadAudioWorklet } from './audio-worklet-loader.js';
+
 const $ = (selector) => document.querySelector(selector);
 const sessionDialog = $('#sessionDialog');
 const sessionForm = $('#sessionForm');
@@ -9,7 +11,6 @@ const MAX_QUEUED_AUDIO_BYTES = 12 * 1024; // Keep at most ~300 ms of 16 kHz mono
 const MAX_PRODUCER_RECONNECTS = 5;
 const AUDIO_PACKET_HEADER_BYTES = 8;
 const DIRECT_PROVIDER_SETUP_TIMEOUT_MS = 3000;
-let audioWorkletReady = null;
 let serverSessions = [];
 let apiConfig = { configured: false, localProviderAvailable: false, model: 'gemini-3.5-transcribe-live' };
 let reuseSessionId = null;
@@ -78,6 +79,9 @@ function renderSession(session, index) {
   const stopAction = live && !session.demo ? `<button class="card-action danger-card-action" data-action="stop" data-id="${escapeHtml(session.id)}">■ <span>Finalizar</span></button>` : '';
   const deleteAction = !session.demo && ['finished', 'paused', 'error'].includes(session.status) ? `<button class="card-action danger-card-action" data-action="delete-session" data-id="${escapeHtml(session.id)}">× <span>Borrar</span></button>` : '';
   const overlayAction = live && !session.demo ? `<button class="card-action" data-action="overlay" data-id="${escapeHtml(session.id)}" title="Copiar URL de overlay OBS">▱ OBS</button>` : '';
+  const chromiumAction = window.nerdearlaDesktop?.openChromiumSession && session.sourceUrl && !active && !session.demo
+    ? `<button class="card-action" data-action="open-chromium" data-id="${escapeHtml(session.id)}" title="Reabrir esta sala en su Chromium aislado">↗ Chromium</button>`
+    : '';
   const speakerHints = Object.entries(session.speakerSuggestions || {}).map(([speakerId, suggestion]) => {
     const speakerNumber = Number(speakerId.slice('speaker-'.length));
     const label = session.speakers?.find((speaker) => speaker.id === speakerId)?.displayName || `Voz ${speakerNumber}`;
@@ -134,7 +138,7 @@ function renderSession(session, index) {
     <div class="session-state"><span class="state-pill ${statusClass}"><i></i>${statusLabel(session.status)}</span><span class="language-pair">${originalLabel}${targetLabel ? `<span>↔</span>${targetLabel}` : ''}</span>${session.demo ? '<span class="demo-tag">DEMO</span>' : ''}</div>
     <div class="session-caption-preview"><div class="preview-label">ÚLTIMO SUBTÍTULO</div><div class="preview-text">${escapeHtml(preview)}${!lastLine ? '<em> — por acá vas a verlo</em>' : ''}</div></div>
     ${speakerHints || speakerMappings ? `<div class="speaker-hints">${speakerMappings}${speakerHints}</div>` : ''}
-    <div class="session-card-footer">${primaryAction}${stopAction}${overlayAction}${deleteAction}<button class="card-action" title="Descargar subtítulos VTT" data-action="export-vtt" data-id="${escapeHtml(session.id)}">↓ VTT</button>${liveDetails}</div>
+    <div class="session-card-footer">${primaryAction}${stopAction}${overlayAction}${chromiumAction}${deleteAction}<button class="card-action" title="Descargar subtítulos VTT" data-action="export-vtt" data-id="${escapeHtml(session.id)}">↓ VTT</button>${liveDetails}</div>
   </article>`;
 }
 
@@ -264,7 +268,8 @@ function openDialog(values = {}) {
     : 'gemini';
   const defaultTarget = values.language === 'es' ? 'en' : 'es';
   $('#translateInput').value = values.translateTo === null && values.id ? 'none' : values.translateTo || defaultTarget;
-  $('#audioSourceInput').value = values.audioSource || 'microphone';
+  $('#audioSourceInput').value = values.audioSource || (window.nerdearlaDesktop?.openChromiumSession ? 'tab' : 'microphone');
+  $('#sourceUrlInput').value = values.sourceUrl || '';
   updateAudioNotice();
   $('#glossaryInput').value = (values.glossary || []).join(', ');
   $('#earlyTranslationInput').checked = Boolean(values.earlyTranslation || values.translationMode === 'hybrid');
@@ -273,10 +278,28 @@ function openDialog(values = {}) {
   setTimeout(() => $('#titleInput').focus(), 40);
 }
 
+if (window.nerdearlaDesktop?.openChromiumSession) {
+  $('#nativeChromiumField').hidden = false;
+  $('#audioSourceInput').value = 'tab';
+}
+
 function updateAudioNotice() {
   const useTabAudio = $('#audioSourceInput').value === 'tab';
+  const nativeSourceUrl = window.nerdearlaDesktop?.openChromiumSession && $('#sourceUrlInput').value.trim();
+  const submitButton = sessionForm.querySelector('[type="submit"]');
+  submitButton.innerHTML = nativeSourceUrl ? 'Abrir sala en Chromium <span>→</span>' : 'Conectar audio <span>→</span>';
+  if (nativeSourceUrl) {
+    $('#audioNotice').innerHTML = '<span>♩</span><span>Se abrirá una ventana Chromium independiente y cargará el link que pegaste. Repetí con el link de cada sala; cada transmisión conserva su propia captura y subtítulos. Después conectá <b>Nerdearla Captura</b> en esa ventana.</span>';
+    return;
+  }
+  if (window.nerdearlaDesktop?.openChromiumSession) {
+    $('#audioNotice').innerHTML = '<span>↗</span><span>Para abrir una sala en Chromium, pegá su URL en <b>Link de la transmisión o sala</b>. Si preferís compartir audio desde una pestaña ya abierta, dejá el campo vacío y elegí la pestaña en el selector.</span>';
+    return;
+  }
+  const title = $('#titleInput').value.trim();
+  const selectedTab = title ? `la pestaña correspondiente a <b>${escapeHtml(title)}</b>` : 'la pestaña de esta sesión';
   $('#audioNotice').innerHTML = useTabAudio
-    ? '<span>♩</span><span>Abrí esta app y la sala en el mismo navegador. En el selector, elegí <b>Pestaña de Chrome</b>, seleccioná Gran Sala y activá <b>Compartir audio de la pestaña</b>. Si el navegador comparte solo imagen, no llegarán subtítulos.</span>'
+    ? `<span>♩</span><span>Esta sesión captura solo ${selectedTab}. En el selector activá <b>Compartir audio de la pestaña</b>. Para otra sala, volvé a <b>Agregar</b> y abrí un selector nuevo. El botón del navegador <b>“Compartir esta pestaña” reemplaza esta fuente</b> y corta el audio de la sala anterior.</span>`
     : '<span>♩</span><span>Al continuar, el navegador te va a pedir acceso a un micrófono o a la entrada de audio de la sala. El audio se enviará a Google Gemini.</span>';
 }
 
@@ -550,8 +573,7 @@ function createAudioProcessor(stream, socket, sessionId) {
 
   const attachProcessor = async () => {
     if (audioContext.audioWorklet && window.AudioWorkletNode) {
-      audioWorkletReady ||= audioContext.audioWorklet.addModule('/audio-worklet.js');
-      await audioWorkletReady;
+      await loadAudioWorklet(audioContext, '/audio-worklet.js');
       processor = new AudioWorkletNode(audioContext, 'nerdearla-pcm-capture', {
         numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1,
       });
@@ -666,10 +688,13 @@ async function startSession(config, sessionId = null) {
   try {
     stream = config.audioSource === 'tab'
       ? await navigator.mediaDevices.getDisplayMedia({
-        video: { displaySurface: 'browser', frameRate: { ideal: 5, max: 10 } },
+        video: { displaySurface: 'browser', frameRate: { ideal: 1, max: 2 } },
         audio: true,
         preferCurrentTab: false,
         selfBrowserSurface: 'exclude',
+        // Prevent Chromium's browser-level "Share this tab instead" button
+        // from silently switching this session to another room's audio.
+        surfaceSwitching: 'exclude',
         systemAudio: 'exclude',
         windowAudio: 'exclude',
       })
@@ -1057,6 +1082,8 @@ $('#prepareKeynote').addEventListener('click', () => openDialog({
 $('#sessionSearch').addEventListener('input', (event) => { searchText = event.target.value.trim().toLowerCase(); render(); });
 $('#filterButton').addEventListener('click', () => showToast('Mostrando todas las salas. Los filtros avanzados estarán disponibles próximamente.'));
 $('#audioSourceInput').addEventListener('change', updateAudioNotice);
+$('#titleInput').addEventListener('input', updateAudioNotice);
+$('#sourceUrlInput').addEventListener('input', updateAudioNotice);
 $('#languageInput').addEventListener('change', (event) => {
   const language = event.target.value;
   $('#translateInput').value = language === 'es' ? 'en' : 'es';
@@ -1085,8 +1112,19 @@ sessionForm.addEventListener('submit', async (event) => {
     glossary: String(form.get('glossary')).split(/[\n,;]/).map((term) => term.trim()).filter(Boolean),
     earlyTranslation: $('#earlyTranslationInput').checked,
   };
+  const sourceUrl = String(form.get('sourceUrl') || '').trim();
   sessionDialog.close();
-  await startSession(config, reuseSessionId);
+  if (sourceUrl && window.nerdearlaDesktop?.openChromiumSession) {
+    const result = await window.nerdearlaDesktop.openChromiumSession({
+      ...config,
+      sessionId: reuseSessionId || `s-${crypto.randomUUID()}`,
+      sourceUrl,
+    });
+    if (!result?.ok) showToast(result?.error || 'No se pudo abrir Chromium para esta sesión.', 'error');
+    else showToast(`Chromium independiente abierto para «${config.title}». Usá la extensión en esa ventana para conectar el audio.`, 'success');
+  } else {
+    await startSession(config, reuseSessionId);
+  }
   reuseSessionId = null;
 });
 
@@ -1143,6 +1181,21 @@ sessionGrid.addEventListener('click', async (event) => {
   }
   if (button.dataset.action === 'reconnect') {
     openDialog({ ...session, translateTo: session.translateTo });
+  }
+  if (button.dataset.action === 'open-chromium' && window.nerdearlaDesktop?.openChromiumSession) {
+    const result = await window.nerdearlaDesktop.openChromiumSession({
+      sessionId: session.id,
+      title: session.title,
+      speaker: session.speaker,
+      language: session.language,
+      translateTo: session.translateTo,
+      engine: session.requestedEngine || session.engine,
+      glossary: session.glossary,
+      earlyTranslation: session.earlyTranslation,
+      sourceUrl: session.sourceUrl,
+    });
+    if (!result?.ok) showToast(result?.error || 'No se pudo reabrir Chromium.', 'error');
+    else showToast(`Se abrió Chromium aislado para «${session.title}».`, 'success');
   }
   if (button.dataset.action === 'export-vtt') exportFromServer(session, 'vtt');
   if (button.dataset.action === 'export-menu') {

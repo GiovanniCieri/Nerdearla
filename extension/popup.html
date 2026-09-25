@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nerdearla Captura</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand-mark">N</div>
+      <div><strong>Nerdearla Captura</strong><small>Audio independiente por pestaña</small></div>
+      <span id="serverStatus" class="server-status">●</span>
+    </header>
+
+    <section class="tab-card">
+      <small>PESTAÑA ACTIVA</small>
+      <strong id="activeTabTitle">Buscando pestaña…</strong>
+      <span id="activeTabUrl"></span>
+    </section>
+
+    <label for="serverUrl">Servidor Docker</label>
+    <div class="server-field"><input id="serverUrl" type="url" spellcheck="false"><button id="saveServer" title="Guardar dirección">Guardar</button></div>
+    <p id="serverHint" class="hint">Por defecto: http://localhost:3001</p>
+
+    <label for="sessionSelect">Sesión de subtítulos</label>
+    <select id="sessionSelect"><option value="new">＋ Crear una sesión</option></select>
+    <div id="newSessionFields">
+      <label for="titleInput">Sala o charla</label>
+      <input id="titleInput" maxlength="100" placeholder="Ej.: Gran Sala">
+      <label for="speakerInput">Orador (opcional)</label>
+      <input id="speakerInput" maxlength="100" placeholder="Nombre del orador">
+      <label for="engineInput">Motor de transcripción</label>
+      <select id="engineInput"><option value="gemini">Gemini en la nube</option><option value="local">WhisperLiveKit local</option><option value="auto">Automático (Gemini + respaldo local)</option></select>
+      <div class="language-row">
+        <div><label for="languageInput">Audio</label><select id="languageInput"><option value="en">Inglés</option><option value="es">Español</option><option value="pt">Portugués</option><option value="auto">Automático</option></select></div>
+        <div><label for="translateInput">Traducir a</label><select id="translateInput"><option value="es">Español</option><option value="en">Inglés</option><option value="pt">Portugués</option><option value="none">Sin traducción</option></select></div>
+      </div>
+      <details class="advanced-fields"><summary>Glosario y traducción anticipada</summary><label for="glossaryInput">Glosario técnico (separado por comas)</label><textarea id="glossaryInput" rows="2" placeholder="Nerdearla, Kubernetes"></textarea><label class="checkbox-row"><input id="earlyTranslationInput" type="checkbox"> Mostrar borradores de traducción antes</label><p id="earlyTranslationHelp" class="hint">Los borradores pueden aparecer antes, con mayor consumo de cuota.</p></details>
+    </div>
+
+    <p id="notice" class="notice">Al iniciar, esta pestaña se captura por su ID. Podés iniciar otras salas desde sus pestañas sin reemplazar esta fuente.</p>
+    <button id="captureButton" class="primary" disabled>Conectar esta pestaña</button>
+    <p id="statusMessage" role="status" aria-live="polite"></p>
+    <a id="audienceLink" target="_blank" rel="noreferrer" hidden>Abrir subtítulos de audiencia ↗</a>
+    <footer>La extensión no guarda el audio. El servidor procesa audio PCM de 16 kHz y lo envía al motor configurado.</footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

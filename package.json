@@ -1,7 +1,9 @@
 {
   "name": "nerdearla-live-captions",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "productName": "Nerdearla Live",
   "private": true,
+  "main": "desktop/main.cjs",
   "type": "module",
   "description": "Subtítulos y traducción en vivo para conferencias, con Gemini Live API.",
   "engines": {
@@ -12,9 +14,10 @@
     "dev": "node --watch server.js",
     "desktop": "electron desktop/main.cjs",
     "desktop:smoke": "electron desktop/main.cjs --smoke-test",
+    "desktop:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-desktop-win.ps1",
     "smoke:gemini-setup": "node scripts/smoke-gemini-setup.mjs",
     "evaluate-quality": "node scripts/evaluate-quality.mjs",
-    "test": "node --test tests",
+    "test": "node scripts/run-tests.cjs",
     "test:integration": "node scripts/smoke-integration.mjs"
   },
   "dependencies": {

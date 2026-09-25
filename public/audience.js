@@ -356,11 +356,11 @@ async function openNativeCaptionOverlay(desktop = window.nerdearlaDesktop) {
     if (!result?.ok) throw new Error(result?.error || 'No se pudo abrir el overlay nativo.');
     $('#openCaptionOverlay')?.setAttribute('aria-pressed', 'true');
     const moveHint = result.moveShortcutAvailable
-      ? result.clickThrough
-        ? `${result.moveShortcut} activa el movimiento; volvé a pulsarlo para que los clics pasen al video.`
-        : `${result.moveShortcut} devuelve los clics al video.`
-      : 'El atajo de movimiento está ocupado; arrastrá el texto directamente.';
-    const closeHint = result.closeShortcutAvailable ? `${result.closeShortcut} cierra el overlay.` : 'Alt+F4 cierra el overlay.';
+      ? `Usá la barra flotante Mover/Fijar o ${result.moveShortcut} para cambiar el modo de arrastre.`
+      : 'Usá la barra flotante Mover/Fijar para arrastrar y fijar la posición.';
+    const closeHint = result.closeShortcutAvailable
+      ? `La barra flotante tiene Cerrar; ${result.closeShortcut} también cierra el overlay.`
+      : 'La barra flotante tiene un botón Cerrar.';
     $('#captionLaunchDialog')?.close();
     showToast(`Overlay transparente activo. ${moveHint} ${closeHint}`);
   } catch (error) {

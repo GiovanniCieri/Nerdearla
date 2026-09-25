@@ -1,0 +1,28 @@
+.capture-guidance {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 12px 0 15px;
+  padding: 10px 12px;
+  border: 1px solid #dcebe0;
+  border-left: 3px solid #4c9668;
+  border-radius: 6px;
+  background: #f1f7f2;
+  color: #53665a;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.capture-guidance > span {
+  flex: 0 0 auto;
+  color: #398357;
+  font-size: 13px;
+}
+
+.capture-guidance p {
+  margin: 0;
+}
+
+.capture-guidance b {
+  color: #315c40;
+}

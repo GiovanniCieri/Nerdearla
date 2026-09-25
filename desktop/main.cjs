@@ -1,10 +1,16 @@
 const path = require('node:path');
+const { spawn } = require('node:child_process');
+const { existsSync, mkdirSync } = require('node:fs');
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require('electron');
+const { pathToFileURL } = require('node:url');
+const { buildChromiumLaunch, findChromiumExecutable, normalizeLaunchConfig } = require('./chromium-launch.cjs');
 
 const SERVER_URL = process.env.NERDEARLA_URL || 'http://localhost:3001';
 const serverOrigin = new URL(SERVER_URL).origin;
 const preloadPath = path.join(__dirname, 'preload.cjs');
 const overlays = new Map();
+const overlayControls = new Map();
+const overlayClickThroughBySession = new Map();
 const overlayHotkeys = { move: false, close: false };
 const DESKTOP_PROTOCOL = 'nerdearla';
 let mainWindow = null;
@@ -24,6 +30,8 @@ const OVERLAY_WINDOW_OPTIONS = Object.freeze({
   movable: true,
   show: false,
 });
+let nextChromiumDebugPort = Number(process.env.NERDEARLA_CHROMIUM_DEBUG_PORT_BASE);
+if (!Number.isInteger(nextChromiumDebugPort) || nextChromiumDebugPort < 1024 || nextChromiumDebugPort > 65535) nextChromiumDebugPort = 0;
 
 function trustedUrl(value) {
   try { return new URL(value).origin === serverOrigin; }
@@ -45,7 +53,7 @@ function captionUrl({ sessionId, lang = 'original', demo = false }) {
 
 function restrictNavigation(window) {
   window.webContents.on('will-navigate', (event, url) => {
-    if (!trustedUrl(url)) event.preventDefault();
+    if (!trustedUrl(url) && url !== pathToFileURL(path.join(__dirname, 'offline.html')).href) event.preventDefault();
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (!trustedUrl(url)) return { action: 'deny' };
@@ -124,30 +132,101 @@ if (!hasDesktopLock) {
 }
 
 function setOverlayClickThrough(enabled) {
-  overlayClickThrough = enabled;
   let failed = false;
-  for (const window of overlays.values()) {
+  for (const [sessionId, window] of overlays.entries()) {
     if (window.isDestroyed()) continue;
-    try { window.setIgnoreMouseEvents(overlayClickThrough, { forward: true }); }
-    catch { failed = true; }
+    try {
+      window.setIgnoreMouseEvents(enabled, { forward: true });
+      overlayClickThroughBySession.set(sessionId, enabled);
+    } catch { failed = true; }
   }
   if (failed) {
-    overlayClickThrough = false;
-    for (const window of overlays.values()) {
+    for (const [sessionId, window] of overlays.entries()) {
       if (window.isDestroyed()) continue;
-      try { window.setIgnoreMouseEvents(false); } catch { /* The compositor may not support mouse passthrough. */ }
+      try {
+        window.setIgnoreMouseEvents(false);
+        overlayClickThroughBySession.set(sessionId, false);
+      } catch { /* The compositor may not support mouse passthrough. */ }
     }
     if (overlayHotkeys.move) globalShortcut.unregister('CommandOrControl+Shift+M');
     overlayHotkeys.move = false;
   }
+  overlayClickThrough = [...overlays.keys()].every((sessionId) => overlayClickThroughBySession.get(sessionId) !== false);
+}
+
+function setSessionOverlayClickThrough(sessionId, enabled) {
+  const overlay = overlays.get(sessionId);
+  if (!overlay || overlay.isDestroyed()) return { ok: false, error: 'El overlay ya no está abierto.' };
+  try {
+    overlay.setIgnoreMouseEvents(enabled, { forward: true });
+    overlayClickThroughBySession.set(sessionId, enabled);
+    overlayClickThrough = [...overlays.keys()].every((id) => overlayClickThroughBySession.get(id) !== false);
+    return { ok: true, clickThrough: enabled };
+  } catch (error) {
+    return { ok: false, error: `No se pudo cambiar el modo del overlay: ${error.message}` };
+  }
+}
+
+function positionOverlayControls(sessionId) {
+  const overlay = overlays.get(sessionId);
+  const controls = overlayControls.get(sessionId);
+  if (!overlay || overlay.isDestroyed() || !controls || controls.isDestroyed()) return;
+  const bounds = overlay.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  const workArea = display.workArea;
+  const width = 244;
+  const height = 48;
+  const x = Math.max(workArea.x, Math.min(workArea.x + workArea.width - width, bounds.x + bounds.width - width));
+  const y = bounds.y - height >= workArea.y ? bounds.y - height : Math.min(workArea.y + workArea.height - height, bounds.y + 6);
+  controls.setBounds({ x, y, width, height }, false);
+}
+
+async function createOverlayControls(sessionId, overlay) {
+  const existing = overlayControls.get(sessionId);
+  if (existing && !existing.isDestroyed()) {
+    positionOverlayControls(sessionId);
+    existing.showInactive();
+    return existing;
+  }
+  const controls = new BrowserWindow({
+    x: 0,
+    y: 0,
+    width: 244,
+    height: 48,
+    frame: false,
+    transparent: false,
+    backgroundColor: '#111916',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    show: false,
+    webPreferences: webPreferences(),
+  });
+  controls.setAlwaysOnTop(true, 'screen-saver');
+  overlayControls.set(sessionId, controls);
+  controls.on('closed', () => {
+    if (overlayControls.get(sessionId) === controls) overlayControls.delete(sessionId);
+    const captionWindow = overlays.get(sessionId);
+    if (captionWindow && !captionWindow.isDestroyed()) captionWindow.close();
+  });
+  overlay.on('move', () => positionOverlayControls(sessionId));
+  overlay.on('resize', () => positionOverlayControls(sessionId));
+  const controlsUrl = new URL(pathToFileURL(path.join(__dirname, 'overlay-controls.html')).href);
+  controlsUrl.searchParams.set('session', sessionId);
+  await controls.loadURL(controlsUrl.href);
+  if (controls.isDestroyed()) return null;
+  positionOverlayControls(sessionId);
+  controls.showInactive();
+  return controls;
 }
 
 function registerOverlayHotkeys() {
   if (!overlayHotkeys.move) {
     overlayHotkeys.move = globalShortcut.register('CommandOrControl+Shift+M', () => {
-      setOverlayClickThrough(!overlayClickThrough);
+      const allClickThrough = [...overlays.keys()].every((sessionId) => overlayClickThroughBySession.get(sessionId) !== false);
+      setOverlayClickThrough(!allClickThrough);
     });
-    if (overlayHotkeys.move && overlays.size === 0) overlayClickThrough = true;
   }
   if (!overlayHotkeys.close) {
     overlayHotkeys.close = globalShortcut.register('CommandOrControl+Shift+X', () => {
@@ -164,6 +243,7 @@ function releaseOverlayHotkeysWhenIdle() {
   overlayHotkeys.move = false;
   overlayHotkeys.close = false;
   overlayClickThrough = false;
+  overlayClickThroughBySession.clear();
 }
 
 function createMainWindow(startPath = '/', show = true) {
@@ -177,6 +257,10 @@ function createMainWindow(startPath = '/', show = true) {
     webPreferences: webPreferences(),
   });
   restrictNavigation(mainWindow);
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, failedUrl, isMainFrame) => {
+    if (!isMainFrame || !failedUrl.startsWith(serverOrigin)) return;
+    void mainWindow.loadFile(path.join(__dirname, 'offline.html'));
+  });
   mainWindow.on('closed', () => { mainWindow = null; });
   return mainWindow.loadURL(new URL(startPath, SERVER_URL).href);
 }
@@ -192,12 +276,13 @@ async function createCaptionOverlay(payload, sender) {
   const current = overlays.get(sessionId);
   if (current && !current.isDestroyed()) {
     current.show();
-    current.focus();
     const hotkeys = registerOverlayHotkeys();
+    await createOverlayControls(sessionId, current);
+    const clickThrough = overlayClickThroughBySession.get(sessionId) !== false;
     return {
       ok: true,
       existing: true,
-      clickThrough: overlayClickThrough,
+      clickThrough,
       moveShortcutAvailable: hotkeys.move,
       closeShortcutAvailable: hotkeys.close,
       moveShortcut: process.platform === 'darwin' ? '⌘⇧M' : 'Ctrl+Shift+M',
@@ -216,6 +301,7 @@ async function createCaptionOverlay(payload, sender) {
   overlay.setAlwaysOnTop(true);
   restrictNavigation(overlay);
   const hotkeys = registerOverlayHotkeys();
+  overlayClickThroughBySession.set(sessionId, true);
   overlay.webContents.on('before-input-event', (event, input) => {
     const closeShortcut = input.key === 'Escape'
       || (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'q')
@@ -226,9 +312,13 @@ async function createCaptionOverlay(payload, sender) {
     }
   });
   overlays.set(sessionId, overlay);
-  if (hotkeys.move) setOverlayClickThrough(overlayClickThrough);
+  setSessionOverlayClickThrough(sessionId, true);
   overlay.on('closed', () => {
     if (overlays.get(sessionId) === overlay) overlays.delete(sessionId);
+    overlayClickThroughBySession.delete(sessionId);
+    const controls = overlayControls.get(sessionId);
+    if (controls && !controls.isDestroyed()) controls.close();
+    overlayControls.delete(sessionId);
     releaseOverlayHotkeysWhenIdle();
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send('nerdearla:caption-overlay-closed', sessionId);
@@ -242,10 +332,11 @@ async function createCaptionOverlay(payload, sender) {
   try {
     await overlay.loadURL(captionUrl({ sessionId, lang: payload?.lang, demo: payload?.demo === true }));
     if (!overlay.isDestroyed()) overlay.show();
+    await createOverlayControls(sessionId, overlay);
     return {
       ok: true,
       existing: false,
-      clickThrough: overlayClickThrough,
+      clickThrough: overlayClickThroughBySession.get(sessionId) !== false,
       moveShortcutAvailable: hotkeys.move,
       closeShortcutAvailable: hotkeys.close,
       moveShortcut: process.platform === 'darwin' ? '⌘⇧M' : 'Ctrl+Shift+M',
@@ -258,6 +349,63 @@ async function createCaptionOverlay(payload, sender) {
 }
 
 ipcMain.handle('nerdearla:open-caption-overlay', (event, payload) => createCaptionOverlay(payload, event.sender));
+
+ipcMain.handle('nerdearla:overlay-control', (event, payload) => {
+  const sessionId = String(payload?.sessionId || '');
+  const action = String(payload?.action || '');
+  const controls = overlayControls.get(sessionId);
+  if (!controls || controls.isDestroyed() || controls.webContents !== event.sender) {
+    return { ok: false, error: 'El control de este overlay ya no está disponible.' };
+  }
+  if (action === 'toggle-move') {
+    return setSessionOverlayClickThrough(sessionId, overlayClickThroughBySession.get(sessionId) === false);
+  }
+  if (action === 'close') {
+    const overlay = overlays.get(sessionId);
+    if (overlay && !overlay.isDestroyed()) overlay.close();
+    else controls.close();
+    return { ok: true, closed: true };
+  }
+  return { ok: false, error: 'La acción del overlay no es válida.' };
+});
+
+ipcMain.handle('nerdearla:open-chromium-session', async (event, payload) => {
+  if (!trustedUrl(event.sender?.getURL?.() || '')) return { ok: false, error: 'La apertura de salas solo se permite desde el panel local de Nerdearla.' };
+  let config;
+  try { config = normalizeLaunchConfig(payload); }
+  catch (error) { return { ok: false, error: error.message }; }
+
+  const chromium = findChromiumExecutable();
+  if (!chromium) return { ok: false, error: 'No encontramos un navegador Chromium que pueda iniciarse. Instalá una versión funcional de Chromium, Brave, Edge o Chrome.' };
+  const extensionDirectory = app.isPackaged
+    ? path.join(process.resourcesPath, 'extension')
+    : path.resolve(__dirname, '..', 'extension');
+  if (!existsSync(path.join(extensionDirectory, 'manifest.json'))) {
+    return { ok: false, error: 'No encontramos la extensión de captura incluida en esta instalación.' };
+  }
+
+  const profileDirectory = path.join(app.getPath('userData'), 'chromium-sessions', config.sessionId);
+  try { mkdirSync(profileDirectory, { recursive: true }); }
+  catch (error) { return { ok: false, error: `No se pudo preparar el perfil aislado de Chromium: ${error.message}` }; }
+  const remoteDebuggingPort = nextChromiumDebugPort || null;
+  if (nextChromiumDebugPort) nextChromiumDebugPort = nextChromiumDebugPort < 65535 ? nextChromiumDebugPort + 1 : 0;
+  const { args } = buildChromiumLaunch({ profileDirectory, extensionDirectory, config, remoteDebuggingPort });
+  return new Promise((resolve) => {
+    let browser;
+    try { browser = spawn(chromium, args, { detached: true, stdio: 'ignore', windowsHide: false }); }
+    catch (error) { resolve({ ok: false, error: `El navegador no pudo iniciarse: ${error.message}` }); return; }
+    const timeout = setTimeout(() => resolve({ ok: true, sessionId: config.sessionId, profileDirectory }), 1200);
+    browser.once('spawn', () => {
+      browser.unref();
+      clearTimeout(timeout);
+      resolve({ ok: true, sessionId: config.sessionId, profileDirectory });
+    });
+    browser.once('error', (error) => {
+      clearTimeout(timeout);
+      resolve({ ok: false, error: `El navegador Chromium no pudo iniciarse: ${error.message}` });
+    });
+  });
+});
 
 if (hasDesktopLock) app.whenReady().then(async () => {
   if (process.argv.includes('--smoke-test')) {
@@ -355,6 +503,24 @@ if (hasDesktopLock) app.whenReady().then(async () => {
         restore('nerdearla.caption-language.native-overlay-smoke', backup.language);
         delete window.__nerdearlaSmokeBackup;
       })()`, true);
+      const controls = overlayControls.get('native-overlay-smoke');
+      if (!controls || controls.isDestroyed()) throw new Error('No se creó la barra nativa para mover y cerrar el overlay.');
+      const controlsUi = await controls.webContents.executeJavaScript(`({
+        moveText: document.querySelector('#moveOverlay span')?.textContent || '',
+        closeText: document.querySelector('#closeOverlay span')?.textContent || '',
+        background: getComputedStyle(document.body).backgroundColor,
+      })`, true);
+      const overlayAlwaysOnTop = window.isAlwaysOnTop();
+      const overlayMovable = window.isMovable();
+      await controls.webContents.executeJavaScript(`document.querySelector('#moveOverlay').click()`, true);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const moveEnabled = overlayClickThroughBySession.get('native-overlay-smoke') === false;
+      await controls.webContents.executeJavaScript(`document.querySelector('#moveOverlay').click()`, true);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const moveCanBeLocked = overlayClickThroughBySession.get('native-overlay-smoke') === true;
+      await controls.webContents.executeJavaScript(`document.querySelector('#closeOverlay').click()`, true);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const closeWorks = window.isDestroyed() && !overlayControls.has('native-overlay-smoke');
       const report = {
         buttonInvokedIPC: opener.pressed,
         captionLaunchChoicesAvailable: opener.choices,
@@ -362,9 +528,13 @@ if (hasDesktopLock) app.whenReady().then(async () => {
         languageSynchronized: view.languageSynchronized,
         styleSynchronized: view.styleSynchronized,
         nativeTransparencyRequested: OVERLAY_WINDOW_OPTIONS.transparent,
-        alwaysOnTop: window.isAlwaysOnTop(),
-        movable: window.isMovable(),
-        clickThrough: overlayClickThrough,
+        alwaysOnTop: overlayAlwaysOnTop,
+        movable: overlayMovable,
+        clickThrough: moveCanBeLocked,
+        controlsUi,
+        moveButtonEnablesDragging: moveEnabled,
+        moveButtonRestoresClickThrough: moveCanBeLocked,
+        closeButtonClosesOverlay: closeWorks,
         renderer: view,
       };
       console.log(`OVERLAY_SMOKE_RESULT ${JSON.stringify(report)}`);
@@ -375,8 +545,10 @@ if (hasDesktopLock) app.whenReady().then(async () => {
         && /rgba\(0, 0, 0, 0\)/i.test(view.stageBackground)
         && view.dragRegion === 'drag'
         && view.toolbarDisplay === 'none' && view.labelsDisplay === 'none'
-        && view.lineCount === 1 && view.caption;
-      window.close();
+        && view.lineCount === 1 && view.caption
+        && controlsUi.moveText === 'Mover' && controlsUi.closeText === 'Cerrar'
+        && moveEnabled && moveCanBeLocked && closeWorks;
+      if (!window.isDestroyed()) window.close();
       app.exit(passed ? 0 : 1);
     } catch (error) {
       console.error(`OVERLAY_SMOKE_FAILED ${error.stack || error}`);

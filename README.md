@@ -39,7 +39,7 @@ La latencia y la calidad dependen del modelo seleccionado, el idioma, la red, el
 
 ```mermaid
 flowchart LR
-  A[Micrófono o pestaña del navegador] --> B[AudioWorklet: PCM mono 16 kHz]
+  A[Micrófono, extensión Chromium por tabId, o pestaña compartida] --> B[AudioWorklet: PCM mono 16 kHz]
   B --> C[WebSocket de la sesión]
   C --> D{Motor elegido}
   D -->|Predeterminado| E[Gemini Live Translate]
@@ -93,3 +93,219 @@ docker compose logs -f captions
 Abrí [http://localhost:3001](http://localhost:3001). El puerto del equipo es `3001` por defecto y el contenedor escucha en `3000`. Para cambiar el puerto del equipo, configurá `HOST_PORT` en `.env`.
 
 Para detener el servicio sin borrar las transcripciones guardadas:
+
+```powershell
+docker compose down
+```
+
+Las sesiones y transcripciones se guardan en el volumen `caption-data`. **No uses `docker compose down -v` si querés conservarlas**, porque también elimina el volumen.
+
+### Ejecución local sin Docker
+
+Instalá Node.js 22.12+, habilitá Corepack y ejecutá:
+
+```powershell
+corepack enable
+pnpm install
+pnpm start
+```
+
+Configurá `GEMINI_API_KEY` en `.env` antes de iniciar una sesión real. Esta modalidad usa `http://localhost:3000`. Para desarrollo con recarga automática, ejecutá `pnpm dev`.
+
+Sin Gemini o sin WhisperLiveKit, se puede recorrer el panel con la demo, pero la demo no procesa audio real.
+
+### Aplicación nativa para Windows
+
+El instalador abre el panel de producción como una app de escritorio. No hace falta abrir el panel en Chrome/Brave. Para generar el instalador desde el repositorio:
+
+```powershell
+corepack pnpm install --frozen-lockfile
+corepack pnpm desktop:win
+```
+
+El ejecutable portable aparece en `dist/Nerdearla-Live-win32-x64-v1.0.0/Nerdearla Live.exe` y el paquete completo en `dist/Nerdearla-Live-win32-x64-v1.0.0.zip`. Descomprimí el ZIP sin mover el `.exe` fuera de su carpeta y abrilo con doble clic. La app se conecta al servidor Docker de `http://localhost:3001`; primero iniciá el servicio con `docker compose up -d` y configurá `.env` como se describe arriba.
+
+En la app nativa, elegí **Nueva sesión**, pegá el link de la transmisión (YouTube, Swapcard u otra página) y configurá idioma y traducción. El botón abre ese link en una ventana Chromium con un perfil aislado; cada sala tiene su propia captura y puede funcionar al mismo tiempo que las demás. El paquete incluye la extensión y la carga automáticamente. En esa ventana abrí **Nerdearla Captura** y elegí **Conectar esta pestaña**. Si la fuente requiere iniciar sesión, hacelo en el perfil que abrió esa sala; se conserva para reconexiones posteriores.
+
+Se necesita un navegador compatible con extensiones Manifest V3 y `tabCapture` (Chromium, Brave, Edge o Chrome, versión 116 o posterior). El ejecutable busca Chromium sin marca primero, seguido de Brave y Edge. En Windows, si no tenés uno, ejecutá `scripts/install-chromium-win.ps1`; descarga una compilación oficial de desarrollo de Chromium en `%LOCALAPPDATA%\Nerdearla\Chromium`. Esa instantánea no se actualiza sola, así que para producción conviene mantener actualizado un navegador compatible. El panel, los subtítulos de audiencia y los overlays funcionan dentro de la app nativa; el navegador abre cada fuente y captura su audio.
+
+El paquete portable incluye el runtime de Electron, la app nativa y la extensión; no necesita Node.js instalado. El backend sigue ejecutándose en Docker, y Google Chrome 116+ reproduce las fuentes de audio. `dist/` no contiene claves ni el archivo `.env`.
+
+## Capturar varias pestañas Chromium a la vez
+
+Para capturar Gran Sala, Auditorio y Sala Abasto en paralelo, usá la extensión incluida en [`extension/`](extension/). Cada clic captura únicamente el ID de la pestaña activa y abre un WebSocket de productor separado para esa sesión. No usa el selector de pantalla del navegador ni el botón **Compartir esta pestaña**, que reemplaza una captura existente.
+
+### Instalar la extensión manualmente
+
+Este paso es para quienes operan desde un Chrome/Brave ya abierto. La app nativa de Windows carga la extensión automáticamente en cada perfil aislado.
+
+1. Iniciá o actualizá Docker con la clave del motor que quieras usar:
+
+   ```powershell
+   docker compose up --build -d
+   ```
+
+   `CAPTURE_EXTENSION_ID` ya tiene el ID estable de la extensión incluida en `docker-compose.yml`; no hace falta editar `.env`. En una instalación nueva, seguí primero los pasos de [Inicio rápido con Docker](#inicio-rápido-con-docker) para crear `.env` y cargar la clave del motor.
+
+2. En Chrome o Brave abrí `chrome://extensions` (en Brave también funciona `brave://extensions`), activá **Modo desarrollador** y elegí **Cargar descomprimida**.
+3. Seleccioná la carpeta `extension` de este repositorio. La extensión requiere Chromium 116 o posterior. El ID esperado es `hihbplbemkhehapigojnjdhcilndcjeg`; el README y Docker ya usan ese ID. Si modificás la clave pública `key` en `extension/manifest.json`, copiá el nuevo ID de la pantalla de extensiones a `CAPTURE_EXTENSION_ID` en `.env` y reiniciá el servicio.
+
+### Operar tres o más salas
+
+1. Dejá Docker en ejecución y abrí cada transmisión en una pestaña de Chrome/Brave.
+2. Volvé a la pestaña de **Gran Sala**, abrí la extensión desde el ícono del navegador, creá o elegí la sesión, configurá idioma y motor, y pulsá **Conectar esta pestaña**.
+3. Repetí desde la pestaña del **Auditorio** y luego desde **Sala Abasto**, cada una con su propia sesión. La extensión muestra `CAP` mientras conecta y `LIVE` cuando el servidor recibe el audio. El audio sigue sonando localmente.
+4. En el panel de producción aparecen las sesiones iniciadas desde la extensión. Abrí la vista de audiencia de cada tarjeta o el enlace que ofrece el popup.
+5. Para detener una sala, volvé a su pestaña y pulsá **Detener audio de esta pestaña**. Las otras capturas siguen activas.
+
+El popup permite elegir una sesión pausada guardada o crear una nueva. El motor Gemini procesa el audio en el servidor; también se puede elegir WhisperLiveKit local si está desplegado. La extensión procesa el audio capturado en un documento oculto y crea una conexión por pestaña/sesión. No captura automáticamente ni se inicia sin el clic del operador: Chromium exige esa acción explícita para otorgar acceso a una pestaña.
+
+El servidor permite el origen WebSocket de esta extensión por su ID configurado. Al cambiar el ID, reiniciá Docker para actualizar tanto el origen WebSocket como CORS de la API. Para un servidor remoto, usá HTTPS/WSS; la primera conexión solicita permiso opcional para ese dominio. La extensión envía solo audio de la pestaña seleccionada y no almacena el audio. La implementación usa las APIs oficiales de Chrome [`tabCapture`](https://developer.chrome.com/docs/extensions/reference/api/tabCapture) y [`offscreen`](https://developer.chrome.com/docs/extensions/reference/api/offscreen); la captura de streams separados depende de que cada pestaña tenga un ID distinto.
+
+Las llamadas `chrome.tabCapture` son independientes por pestaña. Chromium no permite duplicar la captura de una misma pestaña, y la concurrencia final depende de recursos del navegador, CPU, red, motor/cuota y límites del equipo. Antes del evento, hacé una prueba simultánea con las tres pestañas y revisá estado, nivel de audio, subtítulos, latencia y costo por sesión en el panel.
+
+### Capturar una sola fuente con el selector del navegador
+
+El panel también puede capturar micrófono o una pestaña con la API estándar de pantalla. En esta modalidad, para cada sala usá **Nueva sesión → Audio de una pestaña**, elegí una pestaña y activá **Compartir audio de la pestaña**. Cada llamada abre su selector individual. No pulses **Compartir esta pestaña** en la barra superior: esa acción cambia la fuente de una captura existente. Para varias salas, la extensión Chromium de arriba es el flujo recomendado.
+
+### Una sesión por sala
+
+1. Abrí el panel de producción y elegí **Nueva sesión**.
+2. Escribí el nombre de la sala y, opcionalmente, los nombres de panelistas.
+3. Seleccioná el idioma de entrada (`English`, `Español`, `Português` o detección automática) y el idioma de subtítulos. Las combinaciones disponibles dependen del motor y del modelo.
+4. Elegí micrófono/consola o audio de una pestaña.
+5. Para una pestaña, mantené el panel y el stream abiertos en el mismo navegador. Al iniciar esa sesión, elegí la pestaña correspondiente en el selector del navegador y activá **Compartir audio de la pestaña**.
+6. Repetí **Nueva sesión → elegir otra sala → compartir su pestaña** para cada sala. Cada llamada abre un selector individual y necesita una acción explícita del operador. No uses el botón de Chrome **Compartir esta pestaña** del aviso superior para agregar una sala: ese botón cambia la pestaña de la captura que ya existe.
+7. Verificá en cada tarjeta que haya señal y que aumenten los contadores de audio, transcripción y traducción. Compartí la **Vista audiencia** de cada sala.
+8. Al terminar, detené cada sesión. Desde el menú de la tarjeta descargá VTT, SRT o texto.
+
+La API estándar entrega una superficie por captura; las capturas concurrentes se crean mediante llamadas separadas y el navegador puede imponer sus propios límites. Cada sesión conserva su propio audio y no mezcla las salas. La tarjeta de producción muestra estado, retraso, pérdidas y errores; si el navegador corta una captura, reconectá solo esa sala.
+
+## Funciones opcionales
+
+### Glosario y traducción anticipada
+
+Se pueden cargar hasta 100 términos por charla: nombres, siglas, proyectos y vocabulario técnico. El glosario usa una ruta contextual con etapas adicionales; puede mejorar términos propios, pero normalmente agrega latencia y consumo. Los borradores anticipados son provisionales y se vuelven a traducir cuando se confirma la frase.
+
+No se presenta una puntuación de “confianza” sin calibración del proveedor. Para precisión, compará transcripciones con una referencia humana y revisá por separado nombres, cifras, negaciones y terminología.
+
+### Subtítulos en OBS o vMix
+
+La sesión ofrece una URL de audiencia que puede agregarse como **Browser Source**. El modo overlay usa fondo transparente y solo muestra las líneas recientes. Reemplazá el ID por el de la sesión:
+
+```text
+http://localhost:3001/audience.html?session=ID_DE_SESION&lang=translation&overlay=1
+```
+
+Si OBS/vMix está en otro equipo, reemplazá `localhost` por el host accesible y configurá HTTPS/WebSocket. Ajustá resolución, posición y escala desde la fuente del navegador.
+
+### Ventana aparte y escritorio transparente
+
+En la vista de audiencia, **Subtítulos flotantes** ofrece una página aparte y el modo transparente nativo. Para iniciar el cliente de escritorio local:
+
+```powershell
+$env:NERDEARLA_URL = 'http://localhost:3001'
+pnpm desktop
+```
+
+El modo nativo está implementado con Electron y depende del compositor del sistema operativo. En Windows, iniciar la aplicación registra el enlace local usado por el navegador; macOS/Linux necesitan registrar el protocolo al empaquetar el cliente. Un navegador no puede lanzar comandos de consola ocultos. La página aparte funciona como alternativa sin instalar Electron.
+
+El overlay nativo muestra una barra pequeña independiente con **Mover/Fijar** y **Cerrar**. La capa de subtítulos conserva fondo transparente. Pulsá **Mover**, arrastrá las letras a la posición deseada y pulsá **Fijar** para que los clics vuelvan al video. **Cerrar** retira ambas ventanas. La barra sigue disponible aunque los atajos globales estén ocupados por otra app.
+
+### WhisperLiveKit local y diarización
+
+El perfil local se despliega por separado. La primera compilación descarga modelos; el perfil CPU sirve para evaluar integración y salas pequeñas, **no** demuestra capacidad para una conferencia:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build -d
+```
+
+Para activar el respaldo automático cuando Gemini se cae, configurá `AUTO_FALLBACK_TO_LOCAL=true` en `.env`. Para probar diarización con Sortformer:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.diarization.yml up --build -d
+```
+
+La diarización separa voces como “Voz 1” y “Voz 2”. La sugerencia de nombre requiere una presentación explícita que coincida con la lista de oradores, y producción debe confirmarla. No identifica biométricamente a una persona por su voz. Sortformer y ASR compiten por CPU/GPU; medí memoria y latencia con el hardware final y revisá las licencias de cada modelo descargado.
+
+## Costo, capacidad y escalado
+
+El panel actualiza cada dos segundos una **estimación** basada en audio, modelo y tokens registrados. Presenta minutos procesados, estimación facturable según el nivel configurado, equivalente a tarifa paga y presupuesto diario opcional. No consulta la factura de Google ni garantiza cuota disponible. Los precios y límites cambian; verificá la consola y la documentación del proveedor antes de un evento.
+
+La cuota gratuita puede agotarse o limitar la concurrencia. El audio de Gemini se envía al proveedor; el proyecto no guarda el audio, pero sí persiste transcripciones y estado en el volumen. En nivel gratuito aplican las condiciones de tratamiento de datos de Google. Como no hay autenticación, cualquiera con acceso al servidor puede ver sesiones, textos y costos, e iniciar o eliminar sesiones. No expongas el servicio accidentalmente a Internet.
+
+`MAX_ACTIVE_SESSIONS=30` es un **límite de admisión configurable**, no una promesa de que una instancia o la cuota gratuita puedan sostener 30 salas. La v1 corre en un único proceso: conexiones de modelos y espectadores se mantienen en esa instancia.
+
+Para escalar de manera comprobable:
+
+1. Medí una sala durante una charla real; después probá 2, 5, 10 y 30 fuentes durante períodos representativos, con audiencia conectada.
+2. Registrá p50/p95/p99 de captura→primer texto, captura→primera traducción y entrega a audiencia; medí WER, revisión humana, pérdida de paquetes y costo por sala/hora.
+3. Comprobá cuota, límites de solicitudes, duración/reconexión del modelo y gasto con el plan real. Ajustá `MAX_ACTIVE_SESSIONS` a la menor capacidad comprobada o cuota disponible.
+4. Para varias réplicas, agregá un bus compartido (por ejemplo Redis Pub/Sub), almacenamiento compartido y persistente, afinidad para WebSockets productores y límites de costo por sala.
+5. Para ASR/MT local, dimensioná workers y GPU según modelo, VRAM y concurrencia medida; el costo pasa de tarifa por minuto a infraestructura y operación.
+6. Probá red degradada, desconexión del productor, 429, reinicio del contenedor y recuperación. La cola corta evita que el retraso siga creciendo, pero la continuidad completa requiere ensayos en el recinto.
+
+## Configuración
+
+Las variables de [`.env.example`](.env.example) incluyen:
+
+| Variable | Para qué sirve |
+| --- | --- |
+| `GEMINI_API_KEY` | Clave del backend para Gemini. No se expone a la audiencia. |
+| `CAPTURE_EXTENSION_ID` | ID Chromium autorizado para CORS y WebSocket; coincide con la extensión incluida. |
+| `GEMINI_BILLING_TIER` | `free` o nivel pago; cambia cómo se estima el costo mostrado. |
+| `HOST_PORT` | Puerto del equipo para Docker; predeterminado `3001`. |
+| `MAX_ACTIVE_SESSIONS` | Máximo de sesiones admitidas por instancia. |
+| `MAX_AUDIO_QUEUE_CHUNKS` | Cola de audio antes de descartar bloques atrasados. |
+| `DAILY_BUDGET_USD` | Presupuesto diario estimado; `0` lo desactiva. |
+| `DRAFT_TRANSLATION_INTERVAL_MS` | Cadencia mínima de borradores. |
+| `LOCAL_ASR_WS_URL`, `LOCAL_ASR_TOKEN` | Conexión opcional al servicio local. |
+| `AUTO_FALLBACK_TO_LOCAL` | Respaldo a WhisperLiveKit si el perfil local está instalado. |
+| `LOCAL_ASR_INFRA_USD_PER_MINUTE` | Tarifa local para la estimación. |
+| `LOCAL_SPEAKER_DIARIZATION`, `HF_TOKEN` | Diarización y acceso a pesos si el modelo lo requiere. |
+| `TRANSCRIBE_MODEL`, `LIVE_TRANSLATION_MODEL`, `TRANSLATION_MODEL` | Modelos para transcripción, Live Translate y traducción contextual. |
+
+También hay tarifas configurables. No pegues credenciales en issues, capturas, README ni commits.
+
+## API y pruebas
+
+- `GET /api/health`: estado básico del servidor.
+- `GET /api/config`: motores y configuración disponibles.
+- `GET /api/sessions` y `GET /api/sessions/:id`: sesiones y métricas.
+- `GET /api/metrics`, `GET /api/metrics/cost`: monitoreo y estimación.
+- `GET /api/sessions/:id/export?format=vtt|srt|txt&language=original|translation`: exportación.
+- `WS /ws`: audio del productor y eventos para producción/audiencia.
+
+Comandos de validación:
+
+```powershell
+pnpm test
+pnpm test:integration
+pnpm desktop:smoke
+```
+
+La prueba de integración usa proveedores locales simulados: recorre WebSocket, dos sesiones activas, audio PCM, backpressure, diarización, métricas, costos, exportación y persistencia. No consume Gemini y no equivale a una prueba de carga de modelos reales. `pnpm smoke:gemini-setup` verifica Live con Google sin enviar audio, pero sí contacta la API. Para comparar precisión y latencia, seguí [`benchmarks/README.md`](benchmarks/README.md) con audio autorizado y referencias humanas.
+
+## Licencia
+
+El código se publica bajo licencia [MIT](LICENSE). Dependencias, pesos de modelos y servicios externos conservan sus propias condiciones de uso; verificá cada una antes de redistribuir o desplegar.
+
+## Demo y envío a la competencia
+
+**Demo en video (1–2 minutos):** pendiente de grabar y enlazar antes de enviar. Conviene mostrar una fuente real, transcripción original, traducción, elección de idioma de audiencia y, si alcanza el tiempo, OBS/overlay. Para jurados que no hablan español, agregá subtítulos en inglés.
+
+El link del repositorio público y el del proyecto en Devpost se agregan al realizar esos envíos; no se inventan aquí.
+
+## Autor y contacto
+
+**Giovanni Cieri**
+
+- Teléfono: [+54 9 11 4889-9531](tel:+5491148899531)
+- Email: [giovannicieri1@gmail.com](mailto:giovannicieri1@gmail.com)
+- LinkedIn: [linkedin.com/in/giovanni-cieri](https://www.linkedin.com/in/giovanni-cieri/)
+
+## Documentación adicional
+
+- [Implementaciones y decisiones tomadas](docs/implementaciones.md)
+- [Latencia, calidad y opciones de escalado](docs/latencia-escala-y-calidad.md)
+- [Cómo preparar un corpus de evaluación](benchmarks/README.md)

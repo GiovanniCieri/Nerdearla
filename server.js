@@ -9,6 +9,7 @@ import 'dotenv/config';
 import { flushSessions, loadSessions, saveSessions } from './lib/storage.js';
 import { cleanSpeakerAlias, normalizeSpeakerAliases, speakerIdFor, suggestSelfIntroducedSpeakerName } from './lib/speakers.js';
 import { buildGeminiTranscriptionConfig } from './lib/gemini-transcription-config.js';
+import { isCaptureExtensionOrigin, isSameHostOrigin } from './lib/capture-extension-origin.js';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -22,6 +23,7 @@ const LOCAL_ASR_WS_URL = process.env.LOCAL_ASR_WS_URL || '';
 const AUTO_FALLBACK_TO_LOCAL = process.env.AUTO_FALLBACK_TO_LOCAL === 'true';
 const LOCAL_SPEAKER_DIARIZATION = process.env.LOCAL_SPEAKER_DIARIZATION === 'true';
 const MAX_ACTIVE_SESSIONS = Math.max(1, Number(process.env.MAX_ACTIVE_SESSIONS || 30));
+const CAPTURE_EXTENSION_ID = process.env.CAPTURE_EXTENSION_ID || '';
 const MAX_AUDIO_QUEUE_CHUNKS = Math.max(1, Number(process.env.MAX_AUDIO_QUEUE_CHUNKS || 3));
 const MAX_VIEWER_BUFFERED_BYTES = 256 * 1024;
 const BILLING_TIER = process.env.GEMINI_BILLING_TIER === 'paid' ? 'paid' : 'free';
@@ -80,8 +82,26 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function applyCaptureExtensionCors(request, response) {
+  const origin = request.headers.origin || '';
+  if (!isCaptureExtensionOrigin(origin, CAPTURE_EXTENSION_ID)) return false;
+  response.setHeader('access-control-allow-origin', origin);
+  response.setHeader('access-control-allow-methods', 'GET, OPTIONS');
+  response.setHeader('access-control-allow-headers', 'content-type');
+  response.setHeader('vary', 'Origin');
+  return true;
+}
+
 function cleanLine(text) {
   return String(text || '').trim();
+}
+
+function cleanSourceUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return '';
+    return url.href.slice(0, 2048);
+  } catch { return ''; }
 }
 
 function viewerSession(session) {
@@ -115,6 +135,7 @@ function operatorSession(session, full = false) {
     lines: full ? session.lines : (session.lines || []).slice(-100),
     requestedEngine: session.requestedEngine || session.engine,
     audioSource: session.audioSource || 'microphone',
+    sourceUrl: cleanSourceUrl(session.sourceUrl),
     earlyTranslation: Boolean(session.earlyTranslation),
     glossary: session.glossary || [], error: session.error || null,
     translationLatencyMs: session.translationLatencyMs || null,
@@ -260,6 +281,11 @@ function exportTranscript(session, format, translated) {
 
 function handleHttp(request, response) {
   const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
+  const extensionOriginAllowed = applyCaptureExtensionCors(request, response);
+  if (request.method === 'OPTIONS' && request.headers.origin?.startsWith('chrome-extension://')) {
+    response.writeHead(extensionOriginAllowed ? 204 : 403);
+    return response.end();
+  }
   const tokenRoute = url.pathname.match(/^\/api\/sessions\/([^/]+)\/live-token$/);
   if (tokenRoute && request.method === 'POST') {
     const session = sessions.get(decodeURIComponent(tokenRoute[1]));
@@ -495,6 +521,7 @@ function connectProducer(socket, config) {
   }
   session.earlyTranslation = Boolean(config.earlyTranslation);
   session.audioSource = config.audioSource === 'tab' ? 'tab' : 'microphone';
+  session.sourceUrl = cleanSourceUrl(config.sourceUrl);
   const captureDiagnostics = config.captureDiagnostics && typeof config.captureDiagnostics === 'object' ? config.captureDiagnostics : {};
   session.captureDiagnostics = {
     source: session.audioSource,
@@ -1428,9 +1455,10 @@ wss.on('connection', (socket, request) => {
     console.warn(`[producer-ws-error] session=${session.id} error=${JSON.stringify(safeError(error))}`);
   });
   if (process.env.NODE_ENV === 'production' && request.headers.origin) {
-    try {
-      if (new URL(request.headers.origin).host !== request.headers.host) socket.close(1008, 'Origin no permitido');
-    } catch { socket.close(1008, 'Origin inválido'); }
+    if (!isSameHostOrigin(request.headers.origin, request.headers.host)
+      && !isCaptureExtensionOrigin(request.headers.origin, CAPTURE_EXTENSION_ID)) {
+      socket.close(1008, 'Origin no permitido');
+    }
   }
 });
 
