@@ -20,8 +20,8 @@ Cada sesión procesa una fuente de audio y transmite el texto resultante a todos
 | --- | --- |
 | Audio en vivo | Micrófono/consola o audio de una pestaña compatible del navegador, compartida explícitamente por quien opera. |
 | Transcripción y traducción | Flujo Gemini Live recomendado; la interfaz también permite elegir idioma original, destino y detección automática de entrada. |
-| Varias salas | Sesiones independientes; el límite de admisión predeterminado es 30. La integración automatizada mantiene dos sesiones activas usando proveedores simulados. Eso comprueba el enrutamiento concurrente, pero **no** demuestra capacidad para 30 salas reales con Gemini. |
-| Audiencia | Página web por sala con selector de idioma y ventana de subtítulos recientes. |
+| Varias salas | Sesiones independientes. Se comprobó manualmente en Brave la captura simultánea de dos pestañas de stream (Olga y Luzu). La integración automatizada también comprueba dos sesiones con proveedores simulados; ninguna de estas pruebas demuestra capacidad para 30 salas reales con Gemini. |
+| Audiencia | Página web por sala con subtítulos recientes. En esta v1, la persona elige entre el audio original y el único idioma de traducción configurado para esa sesión. |
 | Código abierto | Licencia MIT incluida en [`LICENSE`](LICENSE). |
 | Glosario y borradores | Disponibles como opciones; implican una ruta contextual con más etapas y consumo de texto. |
 | Exportación | VTT, SRT y texto, tanto original como traducido. |
@@ -114,7 +114,38 @@ Configurá `GEMINI_API_KEY` en `.env` antes de iniciar una sesión real. Esta mo
 
 Sin Gemini o sin WhisperLiveKit, se puede recorrer el panel con la demo, pero la demo no procesa audio real.
 
-### Aplicación nativa para Windows
+## Flujo recomendado: panel web y varias salas en Brave
+
+El flujo de operación comprobado para trabajar con varias transmisiones usa **dos ventanas del mismo Brave**: una queda dedicada al panel de Nerdearla Live y otra contiene las pestañas de las transmisiones. No hace falta abrir `Nerdearla Live.exe`.
+
+1. Iniciá Docker y abrí el panel web en Brave: [http://localhost:3001](http://localhost:3001).
+2. Abrí una **ventana nueva** de Brave. En esa segunda ventana, abrí una pestaña por cada transmisión; por ejemplo, una para el stream de Olga y otra para el de Luzu. Iniciá sesión en los sitios que lo requieran y comprobá que cada video reproduzca sonido.
+3. Instalá una vez la extensión de captura siguiendo [Instalar la extensión en Brave](#instalar-la-extensión-en-brave). Dejá el panel en la primera ventana y usá la segunda para operar las pestañas fuente.
+4. En la pestaña del stream de Olga, abrí **Nerdearla Captura** desde el ícono de extensiones. Creá una sesión llamada Olga (o elegí una sesión pausada), seleccioná el idioma hablado y el destino, y pulsá **Conectar esta pestaña**.
+5. Volvé a la pestaña del stream de Luzu y repetí el proceso con su propia sesión. Cada sesión queda asociada a su pestaña y conserva un flujo de audio separado.
+6. Volvé al panel de la primera ventana. Confirmá que ambas salas estén activas y que reciban audio y subtítulos. Abrí la vista de audiencia de cada sesión para revisar la salida.
+7. Para detener una fuente, volvé a su pestaña y pulsá **Detener audio de esta pestaña**. La otra sala sigue conectada.
+
+Este montaje con dos streams simultáneos en Brave fue probado durante el desarrollo. La extensión toma el ID de la pestaña activa con `chrome.tabCapture`; no depende del selector de pantalla ni de **Compartir esta pestaña** de la barra del navegador. Usá el botón de la extensión dentro de cada pestaña fuente para iniciar o detener solo esa sala.
+
+La misma configuración sirve para YouTube, Swapcard y otras páginas web que reproduzcan audio accesible al navegador. Iniciá la reproducción antes de conectar. DRM, audio bloqueado por el sitio, políticas del navegador o restricciones de la red pueden impedir la captura. Para streams que exijan cuenta, iniciá sesión en Brave antes de conectar la pestaña.
+
+### Instalar la extensión en Brave
+
+En la computadora que ejecuta Brave:
+
+1. Desde el repositorio, ejecutá Docker y configurá `.env` con la clave del proveedor, siguiendo [Inicio rápido con Docker](#inicio-rápido-con-docker).
+2. Abrí `brave://extensions`, activá **Modo desarrollador** y elegí **Cargar descomprimida**.
+3. Seleccioná la carpeta `extension` de este repositorio. La extensión requiere Brave/Chromium 116 o posterior. El ID esperado es `hihbplbemkhehapigojnjdhcilndcjeg`; Docker ya está configurado para ese ID.
+4. Fijá **Nerdearla Captura** en la barra de extensiones para encontrarla en cada pestaña fuente.
+
+El popup muestra la dirección del servidor, la pestaña activa, las sesiones guardadas y el estado de conexión. En una instalación local, usá `http://localhost:3001`. Si configurás otro dominio, guardalo en el popup y aceptá el permiso que solicita Brave. Para un servidor remoto necesitás HTTPS/WSS.
+
+Si cambiás el ID de la extensión en `extension/manifest.json`, actualizá `CAPTURE_EXTENSION_ID` en `.env` y recreá el contenedor. La extensión envía solo el audio capturado al backend; no almacena el audio en disco. Usa las APIs oficiales de Chrome [`tabCapture`](https://developer.chrome.com/docs/extensions/reference/api/tabCapture) y [`offscreen`](https://developer.chrome.com/docs/extensions/reference/api/offscreen).
+
+Cada pestaña fuente necesita su propia sesión. La extensión evita capturar dos veces el mismo tab ID; el número de sesiones simultáneas que el equipo puede sostener depende de la CPU, la red y las cuotas y límites del motor elegido. Dos salas funcionando no implica que una cuenta gratuita pueda procesar treinta a la vez. Antes de un evento, probá la cantidad de salas prevista y observá señal, subtítulos, latencia, errores y costo en el panel.
+
+### Aplicación nativa para Windows (opcional)
 
 El instalador abre el panel de producción como una app de escritorio. No hace falta abrir el panel en Chrome/Brave. Para generar el instalador desde el repositorio:
 
@@ -131,55 +162,9 @@ Se necesita un navegador compatible con extensiones Manifest V3 y `tabCapture` (
 
 El paquete portable incluye el runtime de Electron, la app nativa y la extensión; no necesita Node.js instalado. El backend sigue ejecutándose en Docker, y Google Chrome 116+ reproduce las fuentes de audio. `dist/` no contiene claves ni el archivo `.env`.
 
-## Capturar varias pestañas Chromium a la vez
+### Captura alternativa desde el panel
 
-Para capturar Gran Sala, Auditorio y Sala Abasto en paralelo, usá la extensión incluida en [`extension/`](extension/). Cada clic captura únicamente el ID de la pestaña activa y abre un WebSocket de productor separado para esa sesión. No usa el selector de pantalla del navegador ni el botón **Compartir esta pestaña**, que reemplaza una captura existente.
-
-### Instalar la extensión manualmente
-
-Este paso es para quienes operan desde un Chrome/Brave ya abierto. La app nativa de Windows carga la extensión automáticamente en cada perfil aislado.
-
-1. Iniciá o actualizá Docker con la clave del motor que quieras usar:
-
-   ```powershell
-   docker compose up --build -d
-   ```
-
-   `CAPTURE_EXTENSION_ID` ya tiene el ID estable de la extensión incluida en `docker-compose.yml`; no hace falta editar `.env`. En una instalación nueva, seguí primero los pasos de [Inicio rápido con Docker](#inicio-rápido-con-docker) para crear `.env` y cargar la clave del motor.
-
-2. En Chrome o Brave abrí `chrome://extensions` (en Brave también funciona `brave://extensions`), activá **Modo desarrollador** y elegí **Cargar descomprimida**.
-3. Seleccioná la carpeta `extension` de este repositorio. La extensión requiere Chromium 116 o posterior. El ID esperado es `hihbplbemkhehapigojnjdhcilndcjeg`; el README y Docker ya usan ese ID. Si modificás la clave pública `key` en `extension/manifest.json`, copiá el nuevo ID de la pantalla de extensiones a `CAPTURE_EXTENSION_ID` en `.env` y reiniciá el servicio.
-
-### Operar tres o más salas
-
-1. Dejá Docker en ejecución y abrí cada transmisión en una pestaña de Chrome/Brave.
-2. Volvé a la pestaña de **Gran Sala**, abrí la extensión desde el ícono del navegador, creá o elegí la sesión, configurá idioma y motor, y pulsá **Conectar esta pestaña**.
-3. Repetí desde la pestaña del **Auditorio** y luego desde **Sala Abasto**, cada una con su propia sesión. La extensión muestra `CAP` mientras conecta y `LIVE` cuando el servidor recibe el audio. El audio sigue sonando localmente.
-4. En el panel de producción aparecen las sesiones iniciadas desde la extensión. Abrí la vista de audiencia de cada tarjeta o el enlace que ofrece el popup.
-5. Para detener una sala, volvé a su pestaña y pulsá **Detener audio de esta pestaña**. Las otras capturas siguen activas.
-
-El popup permite elegir una sesión pausada guardada o crear una nueva. El motor Gemini procesa el audio en el servidor; también se puede elegir WhisperLiveKit local si está desplegado. La extensión procesa el audio capturado en un documento oculto y crea una conexión por pestaña/sesión. No captura automáticamente ni se inicia sin el clic del operador: Chromium exige esa acción explícita para otorgar acceso a una pestaña.
-
-El servidor permite el origen WebSocket de esta extensión por su ID configurado. Al cambiar el ID, reiniciá Docker para actualizar tanto el origen WebSocket como CORS de la API. Para un servidor remoto, usá HTTPS/WSS; la primera conexión solicita permiso opcional para ese dominio. La extensión envía solo audio de la pestaña seleccionada y no almacena el audio. La implementación usa las APIs oficiales de Chrome [`tabCapture`](https://developer.chrome.com/docs/extensions/reference/api/tabCapture) y [`offscreen`](https://developer.chrome.com/docs/extensions/reference/api/offscreen); la captura de streams separados depende de que cada pestaña tenga un ID distinto.
-
-Las llamadas `chrome.tabCapture` son independientes por pestaña. Chromium no permite duplicar la captura de una misma pestaña, y la concurrencia final depende de recursos del navegador, CPU, red, motor/cuota y límites del equipo. Antes del evento, hacé una prueba simultánea con las tres pestañas y revisá estado, nivel de audio, subtítulos, latencia y costo por sesión en el panel.
-
-### Capturar una sola fuente con el selector del navegador
-
-El panel también puede capturar micrófono o una pestaña con la API estándar de pantalla. En esta modalidad, para cada sala usá **Nueva sesión → Audio de una pestaña**, elegí una pestaña y activá **Compartir audio de la pestaña**. Cada llamada abre su selector individual. No pulses **Compartir esta pestaña** en la barra superior: esa acción cambia la fuente de una captura existente. Para varias salas, la extensión Chromium de arriba es el flujo recomendado.
-
-### Una sesión por sala
-
-1. Abrí el panel de producción y elegí **Nueva sesión**.
-2. Escribí el nombre de la sala y, opcionalmente, los nombres de panelistas.
-3. Seleccioná el idioma de entrada (`English`, `Español`, `Português` o detección automática) y el idioma de subtítulos. Las combinaciones disponibles dependen del motor y del modelo.
-4. Elegí micrófono/consola o audio de una pestaña.
-5. Para una pestaña, mantené el panel y el stream abiertos en el mismo navegador. Al iniciar esa sesión, elegí la pestaña correspondiente en el selector del navegador y activá **Compartir audio de la pestaña**.
-6. Repetí **Nueva sesión → elegir otra sala → compartir su pestaña** para cada sala. Cada llamada abre un selector individual y necesita una acción explícita del operador. No uses el botón de Chrome **Compartir esta pestaña** del aviso superior para agregar una sala: ese botón cambia la pestaña de la captura que ya existe.
-7. Verificá en cada tarjeta que haya señal y que aumenten los contadores de audio, transcripción y traducción. Compartí la **Vista audiencia** de cada sala.
-8. Al terminar, detené cada sesión. Desde el menú de la tarjeta descargá VTT, SRT o texto.
-
-La API estándar entrega una superficie por captura; las capturas concurrentes se crean mediante llamadas separadas y el navegador puede imponer sus propios límites. Cada sesión conserva su propio audio y no mezcla las salas. La tarjeta de producción muestra estado, retraso, pérdidas y errores; si el navegador corta una captura, reconectá solo esa sala.
+El panel también permite usar un micrófono/consola o abrir el selector estándar para compartir una pestaña. Es útil para una prueba rápida o una fuente, pero para varias salas en Brave usá la extensión siguiendo el flujo anterior. No uses el botón del aviso superior **Compartir esta pestaña** para sumar salas: opera sobre la captura estándar activa.
 
 ## Funciones opcionales
 
