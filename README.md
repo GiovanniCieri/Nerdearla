@@ -6,7 +6,7 @@ Nerdearla Live Captions recibe el audio de cada sala, genera transcripción y tr
 
 > **Versión 1 · Nerdearla Vibeathon 2026.** Es un prototipo funcional para evaluar el flujo completo. No reemplaza a intérpretes profesionales ni promete una latencia o precisión fija.
 
-**English summary:** An open-source live captioning and translation system for conference sessions. Each room has an independent audio stream; audiences can view original or translated captions in a web page, OBS browser source, or desktop overlay.
+**English summary:** An open-source live captioning and translation system for conference sessions. Each room has an independent audio stream; audiences can view original or translated captions in a web page or OBS/vMix browser source.
 
 ## Qué resuelve
 
@@ -26,8 +26,17 @@ Cada sesión procesa una fuente de audio y transmite el texto resultante a todos
 | Glosario y borradores | Disponibles como opciones; implican una ruta contextual con más etapas y consumo de texto. |
 | Exportación | VTT, SRT y texto, tanto original como traducido. |
 | Producción | Métricas de audio, sesiones, latencia, errores y costo estimado. |
-| Overlay | Página transparente para OBS/vMix y overlay nativo de escritorio con Electron. |
+| Subtítulos | Página web por sesión y Browser Source transparente para OBS/vMix. El ejecutable de escritorio queda para más adelante. |
 | Procesamiento local | Perfil opcional de WhisperLiveKit; diarización opcional con Sortformer. Requiere dimensionar y probar el hardware. |
+
+## Stack utilizado
+
+- **Interfaz web:** HTML, CSS y JavaScript del navegador, sin framework de frontend.
+- **Servidor:** Node.js 22, módulos ES, servidor HTTP nativo y WebSocket con `ws`.
+- **Audio del navegador:** Web Audio API y AudioWorklet; la extensión Manifest V3 captura cada pestaña por su ID con `chrome.tabCapture` y procesa el audio en un documento `offscreen`.
+- **Transcripción y traducción en la nube:** SDK oficial `@google/genai`; Gemini 3.5 Transcribe Live y Gemini 3.5 Live Translate Preview. La traducción contextual y los borradores usan Gemini 3.5 Flash Lite.
+- **Despliegue:** Docker y Docker Compose; el servicio se ejecuta en Node.js sobre Alpine Linux y persiste sesiones en un volumen Docker.
+- **Alternativas opcionales:** WhisperLiveKit para ASR local y Sortformer para diarización. Requieren servicios y recursos adicionales.
 
 ### Latencia y precisión
 
@@ -48,7 +57,7 @@ flowchart LR
   F --> G
   G --> H[WebSocket de audiencia]
   H --> I[Página de subtítulos]
-  H --> J[OBS/vMix o overlay de escritorio]
+  H --> J[OBS/vMix Browser Source]
   C --> K[Métricas y estimación de costo]
 ```
 
@@ -59,16 +68,20 @@ El cliente captura audio y lo convierte en PCM mono de 16 kHz en bloques cortos.
 - Docker Desktop con Docker Compose, recomendado para empezar.
 - Una clave de Gemini con acceso al modelo Live que se vaya a usar. La cuota gratuita es limitada y no garantiza disponibilidad ni capacidad para múltiples salas.
 - Chrome o Brave actualizado si se va a compartir el audio de una pestaña.
+- Git si vas a clonar el repositorio con los comandos de abajo.
 - Node.js 22.12 o posterior y `pnpm` solo para ejecutar fuera de Docker o desarrollar.
 - Micrófono, entrada de consola o una pestaña que esté reproduciendo audio.
 
 Para compartir la aplicación con otros dispositivos se necesita HTTPS y soporte de WebSocket en el proxy. En `localhost`, el navegador permite probar la captura sin configurar un certificado.
 
+<a id="inicio-rapido-docker"></a>
 ## Inicio rápido con Docker
 
-En PowerShell, desde la carpeta del proyecto:
+Este es el camino recomendado para usar la v1 desde la web en Windows. Necesitás Docker Desktop abierto, Brave actualizado, Git y una clave de Gemini. En PowerShell, cloná el proyecto y prepará la configuración:
 
 ```powershell
+git clone https://github.com/GiovanniCieri/Nerdearla.git
+cd Nerdearla
 Copy-Item .env.example .env
 notepad .env
 ```
@@ -82,15 +95,31 @@ GEMINI_BILLING_TIER=free
 
 No publiques ni agregues `.env` al repositorio. Está excluido por `.gitignore`; compartí únicamente `.env.example`, que no contiene claves.
 
-Construí e iniciá la aplicación:
+Guardá el archivo e iniciá el servidor:
 
 ```powershell
 docker compose up --build -d
 docker compose ps
+Start-Process http://localhost:3001
+```
+
+El comando abre el panel web. El puerto del equipo es `3001` por defecto y el contenedor escucha en `3000`. Para seguir los logs mientras opera, abrí otra terminal en la carpeta del repositorio y ejecutá:
+
+```powershell
 docker compose logs -f captions
 ```
 
-Abrí [http://localhost:3001](http://localhost:3001). El puerto del equipo es `3001` por defecto y el contenedor escucha en `3000`. Para cambiar el puerto del equipo, configurá `HOST_PORT` en `.env`.
+En Brave, cargá la extensión una vez: abrí `brave://extensions`, activá **Modo desarrollador**, pulsá **Cargar descomprimida** y seleccioná la carpeta `extension` del repositorio. Fijá **Nerdearla Captura** en la barra de extensiones.
+
+Después seguí el [tutorial de dos salas en Brave](#tutorial-dos-salas-brave). Para los siguientes usos, con Docker Desktop abierto alcanza con:
+
+```powershell
+cd Nerdearla
+docker compose up -d
+Start-Process http://localhost:3001
+```
+
+El nivel gratuito de Gemini puede tener cuotas y límites de concurrencia. Configurar `GEMINI_BILLING_TIER=free` sirve para que el panel calcule el costo facturable como cero; no aumenta la cuota disponible.
 
 Para detener el servicio sin borrar las transcripciones guardadas:
 
@@ -114,13 +143,14 @@ Configurá `GEMINI_API_KEY` en `.env` antes de iniciar una sesión real. Esta mo
 
 Sin Gemini o sin WhisperLiveKit, se puede recorrer el panel con la demo, pero la demo no procesa audio real.
 
-## Flujo recomendado: panel web y varias salas en Brave
+<a id="tutorial-dos-salas-brave"></a>
+## Tutorial: dos salas simultáneas en Brave
 
-El flujo de operación comprobado para trabajar con varias transmisiones usa **dos ventanas del mismo Brave**: una queda dedicada al panel de Nerdearla Live y otra contiene las pestañas de las transmisiones. No hace falta abrir `Nerdearla Live.exe`.
+El flujo comprobado usa **dos ventanas del mismo Brave**: una para el panel web y otra para las pestañas fuente. La aplicación `.exe` queda para más adelante; en esta v1 usá el sistema web.
 
 1. Iniciá Docker y abrí el panel web en Brave: [http://localhost:3001](http://localhost:3001).
 2. Abrí una **ventana nueva** de Brave. En esa segunda ventana, abrí una pestaña por cada transmisión; por ejemplo, una para el stream de Olga y otra para el de Luzu. Iniciá sesión en los sitios que lo requieran y comprobá que cada video reproduzca sonido.
-3. Instalá una vez la extensión de captura siguiendo [Instalar la extensión en Brave](#instalar-la-extension-en-brave). Dejá el panel en la primera ventana y usá la segunda para operar las pestañas fuente.
+3. Instalá una vez la extensión de captura con los pasos de [Inicio rápido con Docker](#inicio-rapido-docker). Dejá el panel en la primera ventana y usá la segunda para operar las pestañas fuente.
 4. En la pestaña del stream de Olga, abrí **Nerdearla Captura** desde el ícono de extensiones. Creá una sesión llamada Olga (o elegí una sesión pausada), seleccioná el idioma hablado y el destino, y pulsá **Conectar esta pestaña**.
 5. Volvé a la pestaña del stream de Luzu y repetí el proceso con su propia sesión. Cada sesión queda asociada a su pestaña y conserva un flujo de audio separado.
 6. Volvé al panel de la primera ventana. Confirmá que ambas salas estén activas y que reciban audio y subtítulos. Abrí la vista de audiencia de cada sesión para revisar la salida.
@@ -130,15 +160,6 @@ En la prueba manual que logró mantener dos streams en paralelo, se usó este mo
 
 La misma configuración sirve para YouTube, Swapcard y otras páginas web que reproduzcan audio accesible al navegador. Iniciá la reproducción antes de conectar. DRM, audio bloqueado por el sitio, políticas del navegador o restricciones de la red pueden impedir la captura. Para streams que exijan cuenta, iniciá sesión en Brave antes de conectar la pestaña.
 
-### Instalar la extensión en Brave
-
-En la computadora que ejecuta Brave:
-
-1. Desde el repositorio, ejecutá Docker y configurá `.env` con la clave del proveedor, siguiendo [Inicio rápido con Docker](#inicio-rápido-con-docker).
-2. Abrí `brave://extensions`, activá **Modo desarrollador** y elegí **Cargar descomprimida**.
-3. Seleccioná la carpeta `extension` de este repositorio. La extensión requiere Brave/Chromium 116 o posterior. El ID esperado es `hihbplbemkhehapigojnjdhcilndcjeg`; Docker ya está configurado para ese ID.
-4. Fijá **Nerdearla Captura** en la barra de extensiones para encontrarla en cada pestaña fuente.
-
 El popup muestra la dirección del servidor, la pestaña activa, las sesiones guardadas y el estado de conexión. En una instalación local, usá `http://localhost:3001`. Si configurás otro dominio, guardalo en el popup y aceptá el permiso que solicita Brave. Para un servidor remoto necesitás HTTPS/WSS.
 
 Si cambiás el ID de la extensión en `extension/manifest.json`, actualizá `CAPTURE_EXTENSION_ID` en `.env` y recreá el contenedor. La extensión envía solo el audio capturado al backend; no almacena el audio en disco. Usa las APIs oficiales de Chrome [`tabCapture`](https://developer.chrome.com/docs/extensions/reference/api/tabCapture) y [`offscreen`](https://developer.chrome.com/docs/extensions/reference/api/offscreen).
@@ -146,23 +167,6 @@ Si cambiás el ID de la extensión en `extension/manifest.json`, actualizá `CAP
 Cada pestaña fuente necesita su propia sesión. La extensión evita capturar dos veces el mismo tab ID; el número de sesiones simultáneas que el equipo puede sostener depende de la CPU, la red y las cuotas y límites del motor elegido. Dos salas funcionando no implica que una cuenta gratuita pueda procesar treinta a la vez. Antes de un evento, probá la cantidad de salas prevista y observá señal, subtítulos, latencia, errores y costo en el panel.
 
 En esta v1, el idioma destino se configura al crear cada sesión; la página de audiencia ofrece el audio original o esa traducción. No permite cambiar a un segundo idioma destino mientras la sesión sigue corriendo. La identificación de idioma del modelo también puede confundir idiomas cercanos, como español y portugués, incluso cuando el audio parece claro; revisá las primeras líneas antes de publicar la vista de audiencia.
-
-### Aplicación nativa para Windows (opcional)
-
-El instalador abre el panel de producción como una app de escritorio. No hace falta abrir el panel en Chrome/Brave. Para generar el instalador desde el repositorio:
-
-```powershell
-corepack pnpm install --frozen-lockfile
-corepack pnpm desktop:win
-```
-
-El ejecutable portable aparece en `dist/Nerdearla-Live-win32-x64-v1.0.0/Nerdearla Live.exe` y el paquete completo en `dist/Nerdearla-Live-win32-x64-v1.0.0.zip`. Descomprimí el ZIP sin mover el `.exe` fuera de su carpeta y abrilo con doble clic. La app se conecta al servidor Docker de `http://localhost:3001`; primero iniciá el servicio con `docker compose up -d` y configurá `.env` como se describe arriba.
-
-En la app nativa, elegí **Nueva sesión**, pegá el link de la transmisión (YouTube, Swapcard u otra página) y configurá idioma y traducción. El botón abre ese link en una ventana Chromium con un perfil aislado; cada sala tiene su propia captura y puede funcionar al mismo tiempo que las demás. El paquete incluye la extensión y la carga automáticamente. En esa ventana abrí **Nerdearla Captura** y elegí **Conectar esta pestaña**. Si la fuente requiere iniciar sesión, hacelo en el perfil que abrió esa sala; se conserva para reconexiones posteriores.
-
-Se necesita un navegador compatible con extensiones Manifest V3 y `tabCapture` (Chromium, Brave, Edge o Chrome, versión 116 o posterior). El ejecutable busca Chromium sin marca primero, seguido de Brave y Edge. En Windows, si no tenés uno, ejecutá `scripts/install-chromium-win.ps1`; descarga una compilación oficial de desarrollo de Chromium en `%LOCALAPPDATA%\Nerdearla\Chromium`. Esa instantánea no se actualiza sola, así que para producción conviene mantener actualizado un navegador compatible. El panel, los subtítulos de audiencia y los overlays funcionan dentro de la app nativa; el navegador abre cada fuente y captura su audio.
-
-El paquete portable incluye el runtime de Electron, la app nativa y la extensión; no necesita Node.js instalado. El backend sigue ejecutándose en Docker, y Google Chrome 116+ reproduce las fuentes de audio. `dist/` no contiene claves ni el archivo `.env`.
 
 ### Captura alternativa desde el panel
 
@@ -186,18 +190,9 @@ http://localhost:3001/audience.html?session=ID_DE_SESION&lang=translation&overla
 
 Si OBS/vMix está en otro equipo, reemplazá `localhost` por el host accesible y configurá HTTPS/WebSocket. Ajustá resolución, posición y escala desde la fuente del navegador.
 
-### Ventana aparte y escritorio transparente
+### Página de audiencia en otra ventana
 
-En la vista de audiencia, **Subtítulos flotantes** ofrece una página aparte y el modo transparente nativo. Para iniciar el cliente de escritorio local:
-
-```powershell
-$env:NERDEARLA_URL = 'http://localhost:3001'
-pnpm desktop
-```
-
-El modo nativo está implementado con Electron y depende del compositor del sistema operativo. En Windows, iniciar la aplicación registra el enlace local usado por el navegador; macOS/Linux necesitan registrar el protocolo al empaquetar el cliente. Un navegador no puede lanzar comandos de consola ocultos. La página aparte funciona como alternativa sin instalar Electron.
-
-El overlay nativo muestra una barra pequeña independiente con **Mover/Fijar** y **Cerrar**. La capa de subtítulos conserva fondo transparente. Pulsá **Mover**, arrastrá las letras a la posición deseada y pulsá **Fijar** para que los clics vuelvan al video. **Cerrar** retira ambas ventanas. La barra sigue disponible aunque los atajos globales estén ocupados por otra app.
+Desde una sesión del panel, abrí su vista de audiencia en una ventana aparte para mostrar los subtítulos. También podés copiar la URL de esa sesión para compartirla o usarla como Browser Source de OBS/vMix. El overlay transparente nativo y la aplicación de escritorio `.exe` quedan para una etapa posterior; la v1 recomendada se opera desde el panel web de Brave.
 
 ### WhisperLiveKit local y diarización
 
@@ -279,7 +274,7 @@ El código se publica bajo licencia [MIT](LICENSE). Dependencias, pesos de model
 
 ## Demo y envío a la competencia
 
-**Demo en video (1–2 minutos):** pendiente de grabar y enlazar antes de enviar. Conviene mostrar una fuente real, transcripción original, traducción, selector entre audio original y destino configurado, y, si alcanza el tiempo, OBS/overlay. Para jurados que no hablan español, agregá subtítulos en inglés.
+**Demo en video (1–2 minutos):** pendiente de grabar y enlazar antes de enviar. Conviene mostrar dos fuentes reales en paralelo, transcripción original, traducción, selector entre audio original y destino configurado y, si alcanza el tiempo, OBS/vMix. Para jurados que no hablan español, agregá subtítulos en inglés.
 
 El link del repositorio público y el del proyecto en Devpost se agregan al realizar esos envíos; no se inventan aquí.
 
